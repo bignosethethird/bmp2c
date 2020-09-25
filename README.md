@@ -65,6 +65,11 @@ Set the colour pallete to 2 colours:
 $ convert c.bmp +dither -colors 2 -colorspace gray -contrast-stretch 0 d.bmp
 ```
 
+A final tweak: Set to monochrome
+```bash
+$ convert d.bmp -monochrome d.bmp
+```
+
 Check that we have 2 colours and 1 bit per pixel:
 
 ```bash

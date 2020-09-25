@@ -12,6 +12,7 @@ TODAY=$(date +"%d %b %Y")
 YEAR=$(date +"%Y")
 ISODATE=$(date +%Y%m%d)
 EXITCODE=0
+ENVIRONMENT=$(hostname)
 
 # Set up logging if not already setup - this is important if we run this as a cron job
 LOGFILE="${HOME}/.${PROGNAME}.log"
@@ -38,45 +39,45 @@ function DEBUG {
 
 function TODO {
   TS=$(date '+%Y/%m/%d %H:%M:%S')
-  printf "[$TS][TODO][${PROGNAME}][${ENVIRONMENT}] $@\n" > /dev/stderr | tee -a $LOGFILE
+  printf "[$TS][TODO][${PROGNAME}][${ENVIRONMENT}] $@\n" >&2 | tee -a $LOGFILE
 }
 
 function INFO {
   TS=$(date '+%Y/%m/%d %H:%M:%S')
-  printf "[$TS][INFO][${PROGNAME}][${ENVIRONMENT}] $(echo $@ | sed -e 's/%/%%/g')\n" > /dev/stderr | tee -a $LOGFILE
+  printf "[$TS][INFO][${PROGNAME}][${ENVIRONMENT}] $(echo $@ | sed -e 's/%/%%/g')\n" >&2 | tee -a $LOGFILE
 }
 
 function WARN {
   TS=$(date '+%Y/%m/%d %H:%M:%S')
-  printf "[$TS][WARN][${PROGNAME}][${ENVIRONMENT}] $@\n" > /dev/stderr | tee -a $LOGFILE
+  printf "[$TS][WARN][${PROGNAME}][${ENVIRONMENT}] $@\n" >&2 | tee -a $LOGFILE
 }
 
 function ERROR {
   TS=$(date '+%Y/%m/%d %H:%M:%S')
-  printf "[$TS][ERROR][${PROGNAME}][${ENVIRONMENT}] $@\n" > /dev/stderr | tee -a $LOGFILE
+  printf "[$TS][ERROR][${PROGNAME}][${ENVIRONMENT}] $@\n" >&2 | tee -a $LOGFILE
 }
 
 function FATAL {
   TS=$(date '+%Y/%m/%d %H:%M:%S')
-  printf "[$TS][FATAL][${PROGNAME}][${ENVIRONMENT}] $@\n" > /dev/stderr | tee -a $LOGFILE
+  printf "[$TS][FATAL][${PROGNAME}][${ENVIRONMENT}] $@\n" >&2 | tee -a $LOGFILE
 }
 
 function LOGDIE {
   TS=$(date '+%Y/%m/%d %H:%M:%S')
-  printf "[$TS][FATAL][${PROGNAME}][${ENVIRONMENT}] $@\n" > /dev/stderr | tee -a $LOGFILE
+  printf "[$TS][FATAL][${PROGNAME}][${ENVIRONMENT}] $@\n" >&2 | tee -a $LOGFILE
   exit 1
 }
 
 function SECURITY {
   TS=$(date '+%Y/%m/%d %H:%M:%S')
-  printf "[$TS][SECURITY][${PROGNAME}][${ENVIRONMENT}] $@\n" > /dev/stderr | tee -a $LOGFILE
+  printf "[$TS][SECURITY][${PROGNAME}][${ENVIRONMENT}] $@\n" >&2 | tee -a $LOGFILE
 }
 
 #============================================================================#
 # Howto
 #============================================================================#
 
-if [[ -z $1 ]]; then
+function usage {
   cat <<!
 Creates a C header-file that contains a C-array of the source file's content.
 This is for use in embedded displays, where two-color bitmaps still rule and
@@ -88,19 +89,16 @@ the default 32 pixel size. The vertical dimension will be calculated fo you.
 
 The resulting output can be redirected into a ready-to-compile C header-file:
 
-  ${0##*/} -s=32 -f=myimage.svg > ~/project/include/myimage.h
+  ${PROGNAME} -f=myimage.svg > ~/project/include/myimage.h
 
 The resulting C-array will be called {filename}_{width}x{height}, e.g. 
 
   #ifndef _MYIMAGE_H_
   #define _MYIMAGE_H_
-
   const unsigned char myimage_32x32[128] = {
     .....
   };
-
   #endif   /* _MYIMAGE_H_ */
-
 
 OPTIONS (Note that there is an '=' sign between argument and value):
   -f, --file=[full path to file if in other directory]
@@ -127,7 +125,7 @@ OPTIONS (Note that there is an '=' sign between argument and value):
 
 !
   exit 1
-fi
+}
 
 #============================================================================#
 # TRAPS
@@ -181,14 +179,11 @@ while [[ $1 = -* ]]; do
   shift
 done
 
+# parameter validate
 if [[ -z $size ]]; then
   INFO "Setting horizontal size to default of 32"
   size=32
 fi
-
-if 
-
-infile=${1}
 
 # Input validate
 if [[ ! -f $infile ]]; then
@@ -197,7 +192,7 @@ if [[ ! -f $infile ]]; then
 fi
 
 # If the input file is not a BMP file. convert it to one
-if [[ ${infile##*.} -ne "bmp" ]]; then
+if [[ ${infile##*.} != "bmp" ]]; then
   INFO "$infile is not a bitmap file. Converting it to $tmp1..."
   convert $infile $tmp1  
 else
@@ -225,17 +220,19 @@ fi
 # Resize - first we start by leaving a border of 1 pixel all around
 size_x=$((size-2))
 size_y=$(((size * H / W)-2))
-$ convert $tmp1 -resize ${size_x}x${size_y} $tmp2
+convert $tmp1 -resize ${size_x}x${size_y} $tmp2
 size_x=$((size_x+2))
 size_y=$((size_y+2))
 # Put a 1 pixel border around it 
-convert $tmp2 -bordercolor white -border 1x1 $tmp3
+convert $tmp2 -bordercolor white -border 1x1 $tmp2
 # Set the colour depth to 2 colours, so that we have a single bit per pixel in the end:
-convert $tmp3 -depth 2 $tmp2
+convert $tmp2 -depth 2 $tmp2
 # Set the colour pallete to 2 colours:
-convert $tmp2 +dither -colors 2 -colorspace gray -contrast-stretch 0 $tmp1
+convert $tmp2 +dither -colors 2 -colorspace gray -contrast-stretch 0 $tmp2
+# Final tweak: Set to monochrome
+convert $tmp2 -monochrome $tmp2
 # Check that we have 2 colours and 1 bit per pixel:
-identify $tmp1 | grep "1-bit" > /dev/null
+identify $tmp2 | grep "1-bit" > /dev/null
 if [[ $? -ne 0 ]]; then
   ERROR "Failed to convert $infile to a 2-colour file. Exiting..."
   exit 1
@@ -243,16 +240,17 @@ fi
 
 # Chop BMP header so that we only remain with the raster data
 # Calculate bytes
-filesize=$(stat -c%s $tmp1)
+filesize=$(stat -c%s $tmp2)
 imagesize=$((size_x * size_y / 8))
 chopbytes=$((filesize-imagesize))
-dd if=$tmp1 of=$tmp3 skip=${chopbytes} iflag=skip_bytes,count_bytes 2>/dev/null
+dd if=$tmp2 of=$tmp3 skip=${chopbytes} iflag=skip_bytes,count_bytes 2>/dev/null
 if [[ $? -ne 0 ]]; then
-  ERROR "There was an error lopping the BMP header from the 1-bit bitmap file $tmp1. Doing a HEX DUMP and then exiting..."
-  hexdump -C $tmp1 > /dev/stderr
+  ERROR "There was an error lopping the BMP header from the 1-bit bitmap file $tmp2. Doing a HEX DUMP and then exiting..."
+  hexdump -C $tmp2 > /dev/stderr
   exit 1
 fi 
-filesize=$(stat -c%s $tmp2)
+# Final sanity check
+filesize=$(stat -c%s $tmp3)
 if [[ $filesize -ne $imagesize ]]; then
   ERROR "The file size does not tally with the calculated image data size in the 1-bit bitmap file $tmp3. Doing a BINARY DUMP and then exiting..."
   xxr -b -c 4 $tmp3 > /dev/stderr
@@ -262,7 +260,8 @@ fi
 # reversing the content on a bit-wise basis
 rm $tmp4 2>/dev/null
 binstr=$(xxd -b -c 1 $tmp3 | cut -f 2 -d " " | sed -E 's/(.)/\1 /g' | tr '\n' ' ' | sed -E 's/ //g' | rev )
-for ((i=0;i<${#binstr};i+=8)); do 
+binstrlen=${#binstr}
+for ((i=0;i<$binstrlen;i+=8)); do 
   binchar=${binstr:$i:8}  
   printf "%02X " $((2#${binchar})) | xxd -r -p >> $tmp4
 done
@@ -279,7 +278,7 @@ printf \
 #define _${imagename^^}_H_
 
 const "
-xxd -i $tmp5
+xxd -i $tmp5 | sed -e 's/_tmp_//'
 printf "
 #endif   /* _${imagename^^}_H_ */
 "
