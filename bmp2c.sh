@@ -1,20 +1,17 @@
 #!/bin/bash
 
 PROGNAME=${0##*/}
-tmp1=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX)
-tmp2=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX)
-tmp3=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX)
+PROGNAME=${PROGNAME%.*}
+tmp1=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).bmp
+tmp2=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).bmp
+tmp3=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).raster
+tmp4=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).raster
 
 NOW=$(date +"%Y-%m-%d %H:%M:%S")
 TODAY=$(date +"%d %b %Y")
 YEAR=$(date +"%Y")
 ISODATE=$(date +%Y%m%d)
 EXITCODE=0
-COMMAND="$0" # Save command
-CWD=$PWD
-VERBOSE=0
-DICTIONARY=""
-TMPFILE=$(mktemp)
 
 # Set up logging if not already setup - this is important if we run this as a cron job
 LOGFILE="${HOME}/.${PROGNAME}.log"
@@ -81,33 +78,53 @@ function SECURITY {
 
 if [[ -z $1 ]]; then
   cat <<!
-Creates a C header-file that contains a C-array of the bitmap file's content.
-This is for use in embedded displays, where single-color bitmaps still rule
-and where storage space is still at a premium.
+Creates a C header-file that contains a C-array of the source file's content.
+This is for use in embedded displays, where two-color bitmaps still rule and
+where storage space and processing power is still at a premium.
 
-You can pass any bitmap file into this utility - it will attempt to create a
-single bit-per-pixel file if it is not one yet, so that you end with a compact
-C-array where every bit in the C-array counts as a pixel.
+You can pass any image file into this utility and you do need to specify the
+horizontal dimension of the target file in pixels, unless you are happy with
+the default 32 pixel size. The vertical dimension will be calculated fo you.
+
+The resulting output can be redirected into a ready-to-compile C header-file:
+
+  ${0##*/} -s=32 -f=myimage.svg > ~/project/include/myimage.h
+
+The resulting C-array will be called {filename}_{width}x{height}, e.g. 
+
+  #ifndef _MYIMAGE_H_
+  #define _MYIMAGE_H_
+
+  const unsigned char myimage_32x32[128] = {
+    .....
+  };
+
+  #endif   /* _MYIMAGE_H_ */
 
 
-The resulting output can be piped into a ready-to-compile C header-file:
+OPTIONS (Note that there is an '=' sign between argument and value):
+  -f, --file=[full path to file if in other directory]
+          The file name of the source image. It can be type of image file
+          and of any size or form factor.
+  -l, --lexicon=[full path to sed lexicon file]
+          Optional lexicon SED file for a crude translation attempt of the
+          source string. This may save some typing and may even deliver an
+          occasional correct result.
+  -g, --google
+          Look text up in Google Translation. There is a limit of how many 
+          such lookups you can do one day from one IP address.
+          Google has suspended this service so this does not work any more.
+  -s, --size
+          This is the horizontal size of the target file in pixels.          
+          If you don't specify it, it will default to 32 pixels.
+          The vertical dimension will be calculated fo you.          
+  -v, --verbose
+          Verbose screen output. All output will also be logged.
+  -d, --debug
+          Output debug messages to screen and log.           
+  -h, --help
+          Displays this text 
 
-${0##*/} mybitmap.bmp > ~/project/include/mybitmap.h
-
-The dimensions and other attributes will be captured and the resulting C-array
-will be called {filename}{width}x{height}, e.g. 
-
-  #ifndef _MYBITMAP_H_
-  #define _MYBITMAP_H_
-
-  const unsigned char mybitmap32x32[128] = {.....};
-
-  #endif   /* _MYBITMAP_H_ */
-
-Parameters:
- 1. Bitmap file
- 
- The resulting file is created in the current working directory.
 !
   exit 1
 fi
@@ -120,6 +137,8 @@ function cleanup {
   rm $tmp1 2>/dev/null
   rm $tmp2 2>/dev/null
   rm $tmp3 2>/dev/null
+  rm $tmp4 2>/dev/null
+  rm $tmp5 2>/dev/null
   exit
 }
 for sig in KILL TERM INT EXIT; do trap "cleanup $sig" "$sig" ; done
@@ -128,6 +147,47 @@ for sig in KILL TERM INT EXIT; do trap "cleanup $sig" "$sig" ; done
 #============================================================================#
 # Main
 #============================================================================#
+
+while [[ $1 = -* ]]; do
+  ARG=$(echo $1|cut -d'=' -f1)
+  VAL=$(echo $1|cut -d'=' -f2)
+
+  case $ARG in
+    "--file" | "-f")
+      if [[ -z $infile ]]; then
+        infile=$VAL; [[ $VAL = "$ARG" ]] && shift && infile=$1        
+      fi
+      ;;
+    "--size" | "-s")
+      if [[ -z $size ]]; then
+        size=$VAL; [[ $VAL = "$ARG" ]] && shift && size=$1        
+      fi
+      ;;
+    "--help" | "-h" )
+      usage
+      ;;
+    "--verbose" | "-v" )
+      option_verbose=1
+      ;;
+    "--debug" | "-d" )
+      option_debug=1
+      option_verbose=1
+      ;;
+    *)
+      print "Invalid option: $1"
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+if [[ -z $size ]]; then
+  INFO "Setting horizontal size to default of 32"
+  size=32
+fi
+
+if 
+
 infile=${1}
 
 # Input validate
@@ -136,45 +196,90 @@ if [[ ! -f $infile ]]; then
   exit 1
 fi
 
+# If the input file is not a BMP file. convert it to one
+if [[ ${infile##*.} -ne "bmp" ]]; then
+  INFO "$infile is not a bitmap file. Converting it to $tmp1..."
+  convert $infile $tmp1  
+else
+  cp $infile $tmp1  
+fi
+
 # Get Width in HEX (offset 0x12 = 18)
-W=$(hexdump -v -e '/1 "%02X "' $infile | awk '{printf "%s%s%s%s", $22, $21, $20, $19 }' | sed -e 's/ //g')
+W=$(hexdump -v -e '/1 "%02X "' $tmp1 | awk '{printf "%s%s%s%s", $22, $21, $20, $19 }' | sed -e 's/ //g')
 W=$((16#$W))
 # Get Height in HEX (offset 0x16h = 22)
-H=$(hexdump -v -e '/1 "%02X "' $infile | awk '{printf "%s%s%s%s", $26, $25, $24, $23}' | sed -e 's/ //g')
+H=$(hexdump -v -e '/1 "%02X "' $tmp1 | awk '{printf "%s%s%s%s", $26, $25, $24, $23}' | sed -e 's/ //g')
 H=$((16#$H))
 # Get bits per pixel in HEX (offset 0x1C = 28)
-BPP=$(hexdump -v -e '/1 "%02X "' $infile | awk '{printf "%s%s", $30, $29}' | sed -e 's/ //g')
+BPP=$(hexdump -v -e '/1 "%02X "' $tmp1 | awk '{printf "%s%s", $30, $29}' | sed -e 's/ //g')
 BPP=$((16#$BPP))
-# Get data bytes in HEX (offset 0x22 = 34)
-BYTES=$(hexdump -v -e '/1 "%02X "' $infile | awk '{printf "%s%s%s%s",  $38, $37, $36, $35 }' | sed -e 's/ //g')
+# Get data bytes in HEX (offset 0x22 = tmp1)
+BYTES=$(hexdump -v -e '/1 "%02X "' $tmp1 | awk '{printf "%s%s%s%s",  $38, $37, $36, $35 }' | sed -e 's/ //g')
 BYTES=$((16#$BYTES))
 
 INFO "File $infile has $BPP bits per pixel and is sized WxH: ${W}x${H} pixels. Total bytes: ${BYTES}"
 if [[ $BPP -gt 1 ]] ; then
-  WARN "More than 1 bit per pixel is used. This is not optimal for single-color embedded system displays"
+  WARN "More than 1 bit per pixel is used. This is not optimal for single-color embedded system displays. We will fix this soon..."  
 fi
 
-# Calculate where the bitmap data starts:
-# If colorspace = 38 bits , skip xxx bytes - 248T colours
-# If colorspace = 32 bits , skip 138 bytes - 16M colours + transparency
-# If colorspace = 24 bits , skip xx bytes - 16M colours
-# If colorspace = 16 bits , skip xx bytes - 65536 colours
-# If colorspace = 8 bits , skip xx bytes - 256 colours
-# If colorspace = 4 bits , skip xx bytes - 16 colours
-# If colorspace = 1 bits , skip  122 bytes  - 2 colours
+# Resize - first we start by leaving a border of 1 pixel all around
+size_x=$((size-2))
+size_y=$(((size * H / W)-2))
+$ convert $tmp1 -resize ${size_x}x${size_y} $tmp2
+size_x=$((size_x+2))
+size_y=$((size_y+2))
+# Put a 1 pixel border around it 
+convert $tmp2 -bordercolor white -border 1x1 $tmp3
+# Set the colour depth to 2 colours, so that we have a single bit per pixel in the end:
+convert $tmp3 -depth 2 $tmp2
+# Set the colour pallete to 2 colours:
+convert $tmp2 +dither -colors 2 -colorspace gray -contrast-stretch 0 $tmp1
+# Check that we have 2 colours and 1 bit per pixel:
+identify $tmp1 | grep "1-bit" > /dev/null
+if [[ $? -ne 0 ]]; then
+  ERROR "Failed to convert $infile to a 2-colour file. Exiting..."
+  exit 1
+fi 
 
+# Chop BMP header so that we only remain with the raster data
+# Calculate bytes
+filesize=$(stat -c%s $tmp1)
+imagesize=$((size_x * size_y / 8))
+chopbytes=$((filesize-imagesize))
+dd if=$tmp1 of=$tmp3 skip=${chopbytes} iflag=skip_bytes,count_bytes 2>/dev/null
+if [[ $? -ne 0 ]]; then
+  ERROR "There was an error lopping the BMP header from the 1-bit bitmap file $tmp1. Doing a HEX DUMP and then exiting..."
+  hexdump -C $tmp1 > /dev/stderr
+  exit 1
+fi 
+filesize=$(stat -c%s $tmp2)
+if [[ $filesize -ne $imagesize ]]; then
+  ERROR "The file size does not tally with the calculated image data size in the 1-bit bitmap file $tmp3. Doing a BINARY DUMP and then exiting..."
+  xxr -b -c 4 $tmp3 > /dev/stderr
+  exit 1
+fi 
 
-_infile=$(basename ${1})
-bitmapname=${_infile%.*}
+# reversing the content on a bit-wise basis
+rm $tmp4 2>/dev/null
+binstr=$(xxd -b -c 1 $tmp3 | cut -f 2 -d " " | sed -E 's/(.)/\1 /g' | tr '\n' ' ' | sed -E 's/ //g' | rev )
+for ((i=0;i<${#binstr};i+=8)); do 
+  binchar=${binstr:$i:8}  
+  printf "%02X " $((2#${binchar})) | xxd -r -p >> $tmp4
+done
 
-INFO "File $infile has $BPP bits per pixel."
+# Creating output
+INFO "Generating C header file content for $infile..."
+_infile=$(basename $infile)
+imagename=${_infile%.*}
+tmp5=$(printf "/tmp/%s.%dx%d" $imagename $size_x $size_y)
+cp $tmp4 $tmp5
 
-echo "#ifndef _${bitmapname^^}_H_"
-echo "#define _${bitmapname^^}_H_"
-echo ""
-echo "const unsigned char ${bitmapname}${W}x${H}[] = {"
-hexdump -v -e '/1 "0x%02X, "' $infile | tail -128 | sed -E 's|((...., ){16})|\1\n|g'
-echo "};"
-echo ""
-echo "#endif   /* _${bitmapname^^}_H_ */"
+printf \
+"#ifndef _${imagename^^}_H_
+#define _${imagename^^}_H_
 
+const "
+xxd -i $tmp5
+printf "
+#endif   /* _${imagename^^}_H_ */
+"
