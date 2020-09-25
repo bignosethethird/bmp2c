@@ -125,7 +125,7 @@ directly into a hexadecimal string with the printf statement,
 which is then passed to the magic 'xxd' utility that converts the hex string to binary and appends it to the file `f.raster`. 
 
 ```bash
-rm -f.raster 2>/dev/null
+rm f.raster 2>/dev/null
 binstr=$(xxd -b -c 1 e | cut -f 2 -d " " | sed -E 's/(.)/\1 /g' | tr '\n' ' ' | sed -E 's/ //g' | rev )
 for ((i=0;i<${#binstr};i+=8)); do 
   binchar=${binstr:$i:8}  
