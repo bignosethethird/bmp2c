@@ -34,6 +34,7 @@ This file is still the scalable vector graphics format, the first manipulation i
 and to simultaneously resize it. It is useful to leave a blank 1 pixel-wide border around display icons, 
 we therefore aim to produce a 30x30 pixel bitmap first and then add the border afterwards to get to our 32x32 pixel bitmap. 
 
+![Starting Image](.assets/2.bmp)
 
 > Note: The intermediate files that are produced are named a, b, c, etc... with appropriate extensions
 > to help you keep track of the process.
