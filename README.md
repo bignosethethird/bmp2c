@@ -233,7 +233,7 @@ $ xxd -b -c 4 f.raster
 
 Check that this raster file is still 128 bytes in size:
 
-``bash
+```bash
 $ stat -c%s f.raster
 128
 ```
