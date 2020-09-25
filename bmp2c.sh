@@ -6,6 +6,7 @@ tmp1=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).bmp
 tmp2=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).bmp
 tmp3=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).raster
 tmp4=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).raster
+tmp6=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).h
 
 NOW=$(date +"%Y-%m-%d %H:%M:%S")
 TODAY=$(date +"%d %b %Y")
@@ -108,19 +109,19 @@ OPTIONS (Note that there is an '=' sign between argument and value):
           Optional lexicon SED file for a crude translation attempt of the
           source string. This may save some typing and may even deliver an
           occasional correct result.
-  -g, --google
-          Look text up in Google Translation. There is a limit of how many 
-          such lookups you can do one day from one IP address.
-          Google has suspended this service so this does not work any more.
   -s, --size
           This is the horizontal size of the target file in pixels.          
           If you don't specify it, it will default to 32 pixels.
           The vertical dimension will be calculated fo you.          
-  -v, --verbose
+  -o, --output Option
+          Produce output header file named according to the source image 
+          filename, without having to do any redirection. The ouput file will
+          created in the current working directory, with an .h extension.
+  -v, --verbose Option
           Verbose screen output. All output will also be logged.
-  -d, --debug
+  -d, --debug Option
           Output debug messages to screen and log.           
-  -h, --help
+  -h, --help Option
           Displays this text 
 
 !
@@ -137,6 +138,7 @@ function cleanup {
   rm $tmp3 2>/dev/null
   rm $tmp4 2>/dev/null
   rm $tmp5 2>/dev/null
+  rm $tmp6 2>/dev/null
   exit
 }
 for sig in KILL TERM INT EXIT; do trap "cleanup $sig" "$sig" ; done
@@ -166,6 +168,9 @@ while [[ $1 = -* ]]; do
       ;;
     "--verbose" | "-v" )
       option_verbose=1
+      ;;
+    "--output" | "-o" )
+      option_output=1
       ;;
     "--debug" | "-d" )
       option_debug=1
@@ -273,12 +278,27 @@ imagename=${_infile%.*}
 tmp5=$(printf "/tmp/%s.%dx%d" $imagename $size_x $size_y)
 cp $tmp4 $tmp5
 
+if [[ $option_output -eq 1 ]]; then
+  # Current working directory
+  outputfilename=$(printf "%s.h" $imagename)
+else 
+  # Temp 
+  outputfilename=$tmp6
+fi
+
 printf \
 "#ifndef _${imagename^^}_H_
 #define _${imagename^^}_H_
 
-const "
-xxd -i $tmp5 | sed -e 's/_tmp_//'
+const " > $outputfilename
+xxd -i $tmp5 | sed -e 's/_tmp_//'  >> $outputfilename
 printf "
 #endif   /* _${imagename^^}_H_ */
-"
+" >> $outputfilename
+
+if [[ $option_output -ne 1 ]]; then
+  cat $outputfilename
+fi
+
+# THE END.
+
