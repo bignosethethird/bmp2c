@@ -20,13 +20,13 @@ Expect to see some interesting BASH techniques here!
 
 # Requirements
 
-You will need to have ImageMagick installed, and the usual gang of Linux utilities,
+You will need to have `ImageMagick` installed, and the usual gang of Linux utilities,
 such as hexdump and the non-sensically-named `xxd` utility. As a general rule, I use icons
 exclusively from `Font Awesome` in my front-end development (both web and embedded), since there
 is a huge variety of icons on offer and because of the consistent styling among them. The icons
 also come in several variants, my preference is the "regular" variant.
 
-# Select your source bitmat
+# Select your source image
 
 We start with the downloading of the FontAwesome desktop package from https://fontawesome.com/download. 
 Unpack it and select your source icon from the svgs directory and move it into your work area.
@@ -36,20 +36,14 @@ we therefore aim to produce a 30x30 pixel bitmap first and then add the border a
 
 ![Starting Image](.assets/1.bmp)
 
-> Note: The intermediate files that are produced are named a, b, c, etc... with appropriate extensions
+> *Note:* The intermediate files that are produced are named a, b, c, etc... with appropriate extensions
 > to help you keep track of the process.
-
-```bash
-$ cd fontawesome-pro-x.xx.x-web/svgs/regular 
-$ exclamation-circle.svg workarea/.
-$ cd workarea
-```
 
 # Create that Bitmap!
 
 A BMP-file not only holds the rasterized image-data in a nice, continuous block of data, 
-but in its header it also holds parameters for corectly displaying, e.g. width, height, colour depth, etc. 
-It is of course the rasterized image-data that we are after and want convert into C-code.
+but in its header it also holds parameters to help display it, e.g. width, height, colour depth, etc. 
+It is of course the rasterized image-data here that we are after and want convert into C-code.
 
 We use the `convert` utility from ImageMagick to convert the SVG-file to a 30x30 pixel BMP-file.
 ```bash
@@ -80,23 +74,10 @@ d.bmp BMP 32x32 32x32+0+0 1-bit sRGB 2c 274B 0.000u 0:00.000
 
 Also look at some other bitmap file properties by doing a binary dump in hexadecimal:
 
-```bash
-$ hexdump -C -v d.bmp | head
+![A hexdump of the BMP file so far](.assets/hexdump1.png)
 
-00000000  42 4d 12 01 00 00 00 00  00 00 92 00 00 00 7c 00  |BM............|.|
-00000010  00 00 20 00 00 00 20 00  00 00 01 00 01 00 00 00  |.. ... .........|
-00000020  00 00 80 00 00 00 c3 0e  00 00 c3 0e 00 00 02 00  |................|
-00000030  00 00 02 00 00 00 00 00  ff 00 00 ff 00 00 ff 00  |................|
-00000040  00 00 00 00 00 ff 42 47  52 73 00 00 00 00 00 00  |......BGRs......|
-00000050  00 00 00 00 00 40 00 00  00 00 00 00 00 00 00 00  |.....@..........|
-00000060  00 40 00 00 00 00 00 00  00 00 00 00 00 40 00 00  |.@...........@..|
-00000070  00 00 00 00 00 00 00 00  00 00 04 00 00 00 00 00  |................|
-00000080  00 00 00 00 00 00 00 00  00 00 00 00 00 00 ff ff  |................|
-00000090  ff 00 ff ff ff ff ff fe  7f ff ff e0 07 ff ff 80  |................|
-```
-
-The 1 at address 0x1C tells us that we are still dealing with a 1-bit, 2-colour depth image file.
-We can also confirm that both width (at 0x12) and height (at 0x16) are 32 pixels (0x20).
+The 1 at address 0x1C (in green) tells us that we are still dealing with a 1-bit, 2-colour depth image file.
+We can also confirm that both width (at 0x12, in red) and height (at 0x16, in red) are 32 pixels (0x20).
 
 # Finally - getting to the image data
 
@@ -116,61 +97,20 @@ $ stat -c%s d.bmp
 274
 ``` 
 
-We therefore need to lopp off the leading 274 - 128 - 146 bytes from the file, so that we end up with the purest, bit-distilled, Highland-quality uncompromised image-data and put the result in file 'e.raster' (strictly-speaking, this is not a Bitmap file any more).
+We therefore need to lopp off the leading 274 - 128 - 146 bytes from the file, so that we end up with the purest, bit-distilled, Highland-quality uncompromised image-data and put the result in file `e.raster` (strictly-speaking, this is not a Bitmap file any more). Confirm that the new raster file is 128 bytes in size:
 
 ```bash
 $ dd if=d.bmp of=e.raster skip=146 iflag=skip_bytes,count_bytes
-```
-
-The new raster file should be 128 bytes in size:
-
-```bash
 $ stat -c%s e.raster
 128
 ```
 
-Lucky for us, we chose to work with icon files of size 32x32, which fits neatly into the 
-display format used by the `xxd`-utility. So when we display file 'e.raster' in binary form (-b) in 4 columns (-c 4) of 8 bits each, we get:
+Lucky for us, we chose to work with icon files of size 32x32, which fits neatly into the display format used by the `xxd`-utility. So when we display file `e.raster` in binary form (`-b`) in 4 columns (`-c 4`) of 8 bits each, we get:
 
-```bash
-$ xxd -b -c 4 e.raster
+![Our first attempt at rasterising the image file...](.assets/hexdump2.png)
 
-00000000: 11111111 11111111 11111111 11111111  ....
-00000004: 11111111 11111110 01111111 11111111  ....
-00000008: 11111111 11100000 00000111 11111111  ....
-0000000c: 11111111 10000000 00000001 11111111  ....
-00000010: 11111110 00000011 11000000 01111111  ....
-00000014: 11111100 00011111 11111000 00111111  ...?
-00000018: 11111000 01111111 11111110 00011111  ....
-0000001c: 11110000 11111111 11111111 00001111  ....
-00000020: 11110001 11111110 01111111 10001111  ....
-00000024: 11100011 11111100 00111111 11000111  ..?.
-00000028: 11100011 11111100 00111111 11000111  ..?.
-0000002c: 11000111 11111100 00111111 11100011  ..?.
-00000030: 11000111 11111110 01111111 11100011  ....
-00000034: 11000111 11111111 11111111 11100011  ....
-00000038: 11001111 11111100 00111111 11110011  ..?.
-0000003c: 10001111 11111100 00111111 11110001  ..?.
-00000040: 10001111 11111100 00111111 11110001  ..?.
-00000044: 11001111 11111100 00111111 11110011  ..?.
-00000048: 11000111 11111100 00111111 11100011  ..?.
-0000004c: 11000111 11111100 00111111 11100011  ..?.
-00000050: 11000111 11111100 00111111 11100011  ..?.
-00000054: 11100011 11111100 00111111 11000111  ..?.
-00000058: 11100011 11111100 00111111 11000111  ..?.
-0000005c: 11110001 11111111 11111111 10001111  ....
-00000060: 11110000 11111111 11111111 00001111  ....
-00000064: 11111000 01111111 11111110 00011111  ....
-00000068: 11111100 00011111 11111000 00111111  ...?
-0000006c: 11111110 00000011 11000000 01111111  ....
-00000070: 11111111 10000000 00000001 11111111  ....
-00000074: 11111111 11100000 00000111 11111111  ....
-00000078: 11111111 11111110 01111111 11111111  ....
-0000007c: 11111111 11111111 11111111 11111111  ....
-```
-
-You can make out an upside-down exclamation mark icon if you squint your eyes...
-The image is stored upside down for reasons that hark back to the age of the French Revolution and OS/2. 
+Through the use of `sed` one can make out an exclamation mark icon without having to squint one's eyes, although it is upside down.
+The image in BMP-files is stored upside down for reasons that hark back to the age of the French Revolution and OS/2. Oh dear.
 
 # Fixing the upside-down probllem
 
@@ -182,7 +122,7 @@ If this does not bother you, skip this next step:
 On the first line below, we crack the binary file 'e.raster' into a long string of binary 1s and 0s and reverse the string (in one step).
 Then we reconstitute the binary file by chunking the binary string up into 8-character long chunks and converting each binary chunk
 directly into a hexadecimal string with the printf statement, 
-which is then passed to the magic 'xxd' utility that converts the hex string to binary and appends it to the file 'f.raster'. 
+which is then passed to the magic 'xxd' utility that converts the hex string to binary and appends it to the file `f.raster`. 
 
 ```bash
 rm -f.raster 2>/dev/null
@@ -195,42 +135,7 @@ done
 
 A quick check reveals that the image is now the correct way around:
 
-```bash
-$ xxd -b -c 4 f.raster
-
-00000000: 11111111 11111111 11111111 11111111  ....
-00000004: 11111111 11111110 01111111 11111111  ....
-00000008: 11111111 11100000 00000111 11111111  ....
-0000000c: 11111111 10000000 00000001 11111111  ....
-00000010: 11111110 00000011 11000000 01111111  ....
-00000014: 11111100 00011111 11111000 00111111  ...?
-00000018: 11111000 01111111 11111110 00011111  ....
-0000001c: 11110000 11111111 11111111 00001111  ....
-00000020: 11110001 11111111 11111111 10001111  ....
-00000024: 11100011 11111100 00111111 11000111  ..?.
-00000028: 11100011 11111100 00111111 11000111  ..?.
-0000002c: 11000111 11111100 00111111 11100011  ..?.
-00000030: 11000111 11111100 00111111 11100011  ..?.
-00000034: 11000111 11111100 00111111 11100011  ..?.
-00000038: 11001111 11111100 00111111 11110011  ..?.
-0000003c: 10001111 11111100 00111111 11110001  ..?.
-00000040: 10001111 11111100 00111111 11110001  ..?.
-00000044: 11001111 11111100 00111111 11110011  ..?.
-00000048: 11000111 11111111 11111111 11100011  ....
-0000004c: 11000111 11111110 01111111 11100011  ....
-00000050: 11000111 11111100 00111111 11100011  ..?.
-00000054: 11100011 11111100 00111111 11000111  ..?.
-00000058: 11100011 11111100 00111111 11000111  ..?.
-0000005c: 11110001 11111110 01111111 10001111  ....
-00000060: 11110000 11111111 11111111 00001111  ....
-00000064: 11111000 01111111 11111110 00011111  ....
-00000068: 11111100 00011111 11111000 00111111  ...?
-0000006c: 11111110 00000011 11000000 01111111  ....
-00000070: 11111111 10000000 00000001 11111111  ....
-00000074: 11111111 11100000 00000111 11111111  ....
-00000078: 11111111 11111110 01111111 11111111  ....
-0000007c: 11111111 11111111 11111111 11111111  ....
-```
+![The correctly inverted image](.assets/hexdump3.png)
 
 Check that this raster file is still 128 bytes in size:
 
