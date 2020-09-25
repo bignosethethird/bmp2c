@@ -39,7 +39,7 @@ we therefore aim to produce a 30x30 pixel bitmap first and then add the border a
 > *Note:* The intermediate files that are produced are named a, b, c, etc... with appropriate extensions
 > to help you keep track of the process.
 
-# Create that Bitmap!
+# Creating a bitmap from your source
 
 A BMP-file not only holds the rasterized image-data in a nice, continuous block of data, 
 but in its header it also holds parameters to help display it, e.g. width, height, colour depth, etc. 
@@ -110,9 +110,9 @@ Lucky for us, we chose to work with icon files of size 32x32, which fits neatly 
 ![Our first attempt at rasterising the image file...](.assets/hexdump2.png)
 
 Through the use of `sed` one can make out an exclamation mark icon without having to squint one's eyes, although it is upside down.
-The image in BMP-files is stored upside down for reasons that hark back to the age of the French Revolution and OS/2. Oh dear.
+The image in BMP-files is stored upside down for reasons that hark back to the days of something called OS/2. Oh dear.
 
-# Fixing the upside-down probllem
+# Fixing the upside-down problem
 
 On a typical embedded system, the inclination would be to program the display of raster images 
 such that they start from the top left corner. This is annoying but we can fix this here by reversing the content 
@@ -173,12 +173,7 @@ You can see that the name of the raster file is used in the variable name of the
 A useful convention is to retain the original icon name throughout the process
 and to append the size attributes to the file name, e.g. the final file name would in 
 in this case be exclamation-circle.32x32, to end up with the variable name like this:
-
-```C
-unsigned char exclamation-circle_32x32[] = {
-  ...
-};
-```
+`unsigned char exclamation-circle_32x32[]`.
 
 # References
 
