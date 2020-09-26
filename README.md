@@ -1,5 +1,6 @@
 # bmp2c
-Create a C header-file that contains a C-array of the bitmap file's content
+
+Create a C header-file that contains a C-array of the bitmap file's content in 1-bit colour depth.
 
 # Synopsys
 
@@ -7,15 +8,20 @@ Embedded displays do not have the sophisticated graphical display abstractions
 that we are so used to in the worlds of laptops, tablets, smartphones and game consoles.
 Instead, images are displayed by writing a value to each pixel on the display. 
 The display is typically a 2-colour display, such as the so-called 'e-paper' that we 
-see on Kindle devices and wrist watches, OLED and and LCD displays.
+see on Kindle devices and wrist watches, OLED and LCD displays. File-size of graphical
+resources on embedded devices still plays a significant role in the business of IoT
+development, which is why it is so important that the colour space is limited to 1-bit / 2 colours only.
+From what I can tell, none of the other utilities out there can produce a 1-bit colour-space file.
 
-In this article we describe how to create a C-code in the form of a C-array from any image
-for use in embedded system 2-colour displays, where file-size on devices 
-still plays a significant role in the business of IoT development, and how you 
-can set up an automated tool chain in the BASH command shell to consistently automate this processs. 
-The end result is a ready-to-compile C header-file that displays a 32x32 pixel 2-colour icon. 
-With a few additional steps. it possible to generate display code for 3-colour embedded displays,
-but will limit ourselves to the simpler case here of 2 colours.
+This article describes how to create C-code in the form of a C-array from any image file
+for direct rendering on embedded system 2-colour displays. You should then be able
+to include this in your automated DevOps tool chain and deliver consistent results.
+
+
+The end result is a ready-to-compile C header-file that contains the image data to displays a 2-colour image. 
+
+With a few additional steps. it possible to generate display code for 3-colour embedded displays, but will limit ourselves to the simpler case here of 2 colours.
+
 Expect to see some interesting BASH techniques here!
 
 # Requirements
@@ -174,11 +180,79 @@ unsigned char f_raster[] = {
 unsigned int f_raster_len = 128;
 ```
 
-You can see that the name of the raster file is used in the variable name of the C-array.
-A useful convention is to retain the original icon name throughout the process
-and to append the size attributes to the file name, e.g. the final file name would in 
-in this case be exclamation-circle.32x32, to end up with the variable name like this:
-`unsigned char exclamation-circle_32x32[]`.
+You can see that the name of the raster file is used in the variable name of 
+the C-array. A useful convention is to retain the original icon name throughout
+the process and to append the size attributes to the file name, e.g. the final
+file name would in this case be exclamation-circle.32x32, to end up with the 
+variable name like this: `unsigned char exclamation-circle_32x32[]`.
+
+# Conclusion
+
+All this witty wisdom has been put together in a utility written in BASH called
+`bmp2c` (see https://github.com/gerritonagoodday/bmp2c), which, as far as I can
+tell, is the only script that delivers 1-bit colour output for any given image
+type. That's why I wrote it, after all - I needed this feature! 
+
+## A quick synopsis:
+
+```bash
+bmp2c -f=filepath -h=height -w=width --stretch|-s --output|-o --verbose|-v
+
+OPTIONS (Note that there is an '=' sign between argument and value):
+  -f, --file=[full path to file if in other directory]
+          The file name of the source image. It can be type of image file
+          and of any size or form factor.
+  -w, --width
+          This is the (horizontal) width of the target file in pixels.          
+          If you don't specify either the width or the height, the width will
+          default to 32 pixels and the height will be determined by the aspect
+          ratio of the source image.
+  -h, --height
+          This is (vertical) height of the target file in pixels and if not
+          specified, this dimension will be calculated for you based on the
+          aspect ratio of the source image and the width dimension that you
+          specified. If you only specify the height but not the width, then
+          the width is likewise calculated based on the source image aspect
+          ratio. 
+  -s, --strech Option
+          You can specify both width and height dimensions that do not 
+          correspond to the source images aspect ratio. If you specify the
+          "stretch" option, then the source image will be deformed to fill
+          the entire target canvas. If this option is not selected, then 
+          whitespace is padded into the surrounding space that is created.
+          This option will be ignored if either the width or height are not
+          specified.
+  -o, --output Option
+          Produce output header file named according to the source image 
+          filename, without having to do any redirection. The ouput file will
+          created in the current working directory, with an .h extension.
+  -v, --verbose Option
+          Verbose screen output. All output will also be logged.
+  -d, --debug Option
+          Output debug messages to screen and log.           
+  -h, --help Option
+          Displays this text 
+```
+
+## Fun things to do
+
+Since this is a command-line utiity, you can do clever things like converting
+an entire directory of icon files into C header-files:
+
+```bash
+$ for i in fontawesome-free-x.x.x-web/svgs/regular/*; do bmp2c -f=$i -o; done
+```
+
+Or, if you want all your image arrays in be held in one C header-file:
+
+```bash
+$ printf "#ifndef _BITMAPS_H_\n#define _BITMAPS_H_\n\n" > bitmaps.h
+$ for i in fontawesome-free-x.x.x-web/svgs/regular/*; do bmp2c -f=$i >> bitmaps.h; done
+$ printf "\n#endif /* _BITMAPS_H_ */\n" >> bitmaps.h
+```
+
+
+
 
 # References
 
