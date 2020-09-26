@@ -1,12 +1,29 @@
 #!/bin/bash
 
+#============================================================================#
+# TRAPS
+#============================================================================#
+function cleanup {
+  rm $tmp1 2>/dev/null
+  rm $tmp2 2>/dev/null
+  rm $tmp3 2>/dev/null
+  rm $tmp4 2>/dev/null
+  rm $tmp5 2>/dev/null
+  rm $tmp6 2>/dev/null  
+}
+for sig in KILL TERM INT EXIT; do trap "cleanup $sig" "$sig" ; done
+
+#============================================================================#
+# Global variables
+#============================================================================#
+
 PROGNAME=${0##*/}
 PROGNAME=${PROGNAME%.*}
-tmp1=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).bmp
-tmp2=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).bmp
-tmp3=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).raster
-tmp4=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).raster
-tmp6=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX).h
+tmp1=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.bmp)
+tmp2=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.bmp)
+tmp3=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.raster)
+tmp4=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.raster)
+tmp6=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.h)
 
 NOW=$(date +"%Y-%m-%d %H:%M:%S")
 TODAY=$(date +"%d %b %Y")
@@ -109,10 +126,14 @@ OPTIONS (Note that there is an '=' sign between argument and value):
           Optional lexicon SED file for a crude translation attempt of the
           source string. This may save some typing and may even deliver an
           occasional correct result.
-  -s, --size
-          This is the horizontal size of the target file in pixels.          
+  -w, --width
+          This is the (horizontal) width of the target file in pixels.          
           If you don't specify it, it will default to 32 pixels.
-          The vertical dimension will be calculated fo you.          
+  -h, --height
+          This is the optional height of the target file in pixels and if not
+          specified, this dimension will be calculated for you based on the
+          aspect ratio of the source image and the width dimension that you
+          specified.
   -o, --output Option
           Produce output header file named according to the source image 
           filename, without having to do any redirection. The ouput file will
@@ -129,22 +150,6 @@ OPTIONS (Note that there is an '=' sign between argument and value):
 }
 
 #============================================================================#
-# TRAPS
-#============================================================================#
-function cleanup {
-  TRACE "[$LINENO] === END [PID $$] on signal $1. Cleaning up ==="
-  rm $tmp1 2>/dev/null
-  rm $tmp2 2>/dev/null
-  rm $tmp3 2>/dev/null
-  rm $tmp4 2>/dev/null
-  rm $tmp5 2>/dev/null
-  rm $tmp6 2>/dev/null
-  exit
-}
-for sig in KILL TERM INT EXIT; do trap "cleanup $sig" "$sig" ; done
-
-
-#============================================================================#
 # Main
 #============================================================================#
 
@@ -158,9 +163,14 @@ while [[ $1 = -* ]]; do
         infile=$VAL; [[ $VAL = "$ARG" ]] && shift && infile=$1        
       fi
       ;;
-    "--size" | "-s")
-      if [[ -z $size ]]; then
-        size=$VAL; [[ $VAL = "$ARG" ]] && shift && size=$1        
+    "--width" | "-w")
+      if [[ -z $width ]]; then
+        width=$VAL; [[ $VAL = "$ARG" ]] && shift && width=$1        
+      fi
+      ;;
+    "--height" | "-h")
+      if [[ -z $height ]]; then
+        height=$VAL; [[ $VAL = "$ARG" ]] && shift && height=$1        
       fi
       ;;
     "--help" | "-h" )
@@ -185,14 +195,18 @@ while [[ $1 = -* ]]; do
 done
 
 # parameter validate
-if [[ -z $size ]]; then
-  INFO "Setting horizontal size to default of 32"
-  size=32
+if [[ -z $width ]]; then
+  INFO "Setting horizontal width to default of 32"
+  width=32
+  if [[ ! -z $height ]]; then
+    WARN "Height was set to $height but no width specified, so ignoring height and defaulting to 32 pixels width"
+    unset height
+  fi
 fi
 
 # Input validate
 if [[ ! -f $infile ]]; then
-  WARN "[$LINENO] File $infile does not exist. Exiting..." 
+  WARN "File $infile does not exist. Exiting..." 
   exit 1
 fi
 
@@ -219,15 +233,21 @@ BYTES=$((16#$BYTES))
 
 INFO "File $infile has $BPP bits per pixel and is sized WxH: ${W}x${H} pixels. Total bytes: ${BYTES}"
 if [[ $BPP -gt 1 ]] ; then
-  WARN "More than 1 bit per pixel is used. This is not optimal for single-color embedded system displays. We will fix this soon..."  
+  WARN "More than 1 bit per pixel is used in the source image. This is not optimal for single-color embedded system displays. We will fix this now."  
 fi
 
 # Resize - first we start by leaving a border of 1 pixel all around
-size_x=$((size-2))
-size_y=$(((size * H / W)-2))
+size_x=$((width-2))
+if [[ -z $height ]]; then
+  INFO "Calculate height based on aspect ratio of the source image"
+  size_y=$(( (width*H/W)-2 ))
+else
+  size_y=$((height-2))
+fi
 convert $tmp1 -resize ${size_x}x${size_y} $tmp2
 size_x=$((size_x+2))
 size_y=$((size_y+2))
+INFO "Creating target image of size WxH: ${size_x}x${size_y} pixels."
 # Put a 1 pixel border around it 
 convert $tmp2 -bordercolor white -border 1x1 $tmp2
 # Set the colour depth to 2 colours, so that we have a single bit per pixel in the end:
