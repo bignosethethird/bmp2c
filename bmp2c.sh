@@ -334,9 +334,8 @@ for ((i=0;i<$binstrlen;i+=8)); do
 done
 
 # Creating output
-INFO "Generating C header file content for $infile"
 _infile=$(basename $infile)
-imagename=${_infile%.*}
+imagename=$(echo ${_infile%.*} | sed -e 's/-/_/g')
 # Rename the file that holds the result so that xxd can create the correct variable name
 tmp5=$(printf "/tmp/%s.%dx%d" $imagename $size_x $size_y)
 cp $tmp4 $tmp5
@@ -344,6 +343,7 @@ cp $tmp4 $tmp5
 if [[ $option_output -eq 1 ]]; then
   # Current working directory
   outputfilename=$(printf "%s.h" $imagename)
+  INFO "Generating C header file $outputfilename for source file $infile"
   printf "#ifndef _${imagename^^}_H_\n#define _${imagename^^}_H_\n\nconst " > $outputfilename
   if [[ ! -f $outputfilename ]]; then
     FATAL "Could not create the file $outputfilename here in $PWD. Exiting."
@@ -352,6 +352,7 @@ if [[ $option_output -eq 1 ]]; then
   xxd -i $tmp5 | sed -e 's/_tmp_//'  >> $outputfilename
   printf "\n#endif   /* _${imagename^^}_H_ */\n" >> $outputfilename
 else 
+  INFO "Generating C header file content for source file $infile"
   # Output to stdout  
   xxd -i $tmp5 | sed -e 's/_tmp_//'  
 fi
