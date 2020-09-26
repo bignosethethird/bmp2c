@@ -200,28 +200,26 @@ bmp2c -f=filepath -h=height -w=width --stretch|-s --output|-o --verbose|-v
 
 OPTIONS (Note that there is an '=' sign between argument and value):
   -f, --file=[full path to file if in other directory]
-          The file name of the source image. It can be type of image file
-          and of any size or form factor.
-  -w, --width
-          This is the (horizontal) width of the target file in pixels.          
-          If you don't specify either the width or the height, the width will
-          default to 32 pixels and the height will be determined by the aspect
-          ratio of the source image.
-  -h, --height
+          The file name of the source image. It can be type of image file and
+          of any size or form factor.
+  -w, --width=[target width in pixels]
+          This is the (horizontal) width of the target file in pixels. If you
+          don't specify either the width or the height, the width will default
+          to 32 pixels and the height will be determined by the aspect ratio of
+          the source image.
+  -h, --height=[target height in pixels]
           This is (vertical) height of the target file in pixels and if not
           specified, this dimension will be calculated for you based on the
           aspect ratio of the source image and the width dimension that you
-          specified. If you only specify the height but not the width, then
-          the width is likewise calculated based on the source image aspect
-          ratio. 
+          specified. If you only specify the height but not the width, then the
+          width is likewise calculated based on the source image aspect ratio. 
   -s, --strech Option
-          You can specify both width and height dimensions that do not 
-          correspond to the source images aspect ratio. If you specify the
-          "stretch" option, then the source image will be deformed to fill
-          the entire target canvas. If this option is not selected, then 
-          whitespace is padded into the surrounding space that is created.
-          This option will be ignored if either the width or height are not
-          specified.
+          You can specify both width and height dimensions such that they do
+          not correspond to the source images aspect ratio. If you specify the
+          "stretch" option, then the source image will be deformed to fill the
+          entire target canvas. If this option is not selected, then whitespace
+          is padded into the surrounding space that is created. This option 
+          will be ignored if neither the width nor height are specified.
   -o, --output Option
           Produce output header file named according to the source image 
           filename, without having to do any redirection. The ouput file will

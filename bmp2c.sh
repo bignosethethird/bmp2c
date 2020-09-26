@@ -8,8 +8,7 @@ function cleanup {
   rm $tmp2 2>/dev/null
   rm $tmp3 2>/dev/null
   rm $tmp4 2>/dev/null
-  rm $tmp5 2>/dev/null
-  rm $tmp6 2>/dev/null  
+  rm $tmp5 2>/dev/null  
 }
 for sig in KILL TERM INT EXIT; do trap "cleanup $sig" "$sig" ; done
 
@@ -23,7 +22,6 @@ tmp1=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.bmp)
 tmp2=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.bmp)
 tmp3=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.raster)
 tmp4=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.raster)
-tmp6=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.h)
 
 NOW=$(date +"%Y-%m-%d %H:%M:%S")
 TODAY=$(date +"%d %b %Y")
@@ -94,9 +92,16 @@ function SECURITY {
 #============================================================================#
 # Howto
 #============================================================================#
+function synopsis {
+cat <<!
+  bmp2c -f=filepath -h=height -w=width --stretch|-s --output|-o --verbose|-v
+!
+}
 
 function usage {
+  synopsis
   cat <<!
+
 Creates a C header-file that contains a C-array of the source file's content.
 This is for use in embedded displays, where two-color bitmaps still rule and
 where storage space and processing power is still at a premium.
@@ -120,20 +125,26 @@ The resulting C-array will be called {filename}_{width}x{height}, e.g.
 
 OPTIONS (Note that there is an '=' sign between argument and value):
   -f, --file=[full path to file if in other directory]
-          The file name of the source image. It can be type of image file
-          and of any size or form factor.
-  -l, --lexicon=[full path to sed lexicon file]
-          Optional lexicon SED file for a crude translation attempt of the
-          source string. This may save some typing and may even deliver an
-          occasional correct result.
-  -w, --width
-          This is the (horizontal) width of the target file in pixels.          
-          If you don't specify it, it will default to 32 pixels.
-  -h, --height
-          This is the optional height of the target file in pixels and if not
+          The file name of the source image. It can be type of image file and
+          of any size or form factor.
+  -w, --width=[target width in pixels]
+          This is the (horizontal) width of the target file in pixels. If you
+          don't specify either the width or the height, the width will default
+          to 32 pixels and the height will be determined by the aspect ratio of
+          the source image.
+  -h, --height=[target height in pixels]
+          This is (vertical) height of the target file in pixels and if not
           specified, this dimension will be calculated for you based on the
           aspect ratio of the source image and the width dimension that you
-          specified.
+          specified. If you only specify the height but not the width, then the
+          width is likewise calculated based on the source image aspect ratio. 
+  -s, --strech Option
+          You can specify both width and height dimensions such that they do
+          not correspond to the source images aspect ratio. If you specify the
+          "stretch" option, then the source image will be deformed to fill the
+          entire target canvas. If this option is not selected, then whitespace
+          is padded into the surrounding space that is created. This option 
+          will be ignored if neither the width nor height are specified.
   -o, --output Option
           Produce output header file named according to the source image 
           filename, without having to do any redirection. The ouput file will
@@ -146,12 +157,16 @@ OPTIONS (Note that there is an '=' sign between argument and value):
           Displays this text 
 
 !
-  exit 1
 }
 
 #============================================================================#
 # Main
 #============================================================================#
+
+if [[ -z $1 ]] ; then
+  synopsis
+  exit 1
+fi
 
 while [[ $1 = -* ]]; do
   ARG=$(echo $1|cut -d'=' -f1)
@@ -173,9 +188,10 @@ while [[ $1 = -* ]]; do
         height=$VAL; [[ $VAL = "$ARG" ]] && shift && height=$1        
       fi
       ;;
-    "--help" | "-h" )
-      usage
+    "--stretch" | "-s" )
+      option_stretch=1
       ;;
+
     "--verbose" | "-v" )
       option_verbose=1
       ;;
@@ -186,8 +202,13 @@ while [[ $1 = -* ]]; do
       option_debug=1
       option_verbose=1
       ;;
-    *)
-      print "Invalid option: $1"
+    "--help" | "-h" )
+      usage
+      exit 1
+      ;;
+    *)    
+      print "Invalid option: $1\n"
+      synopsis
       exit 1
       ;;
   esac
@@ -195,13 +216,9 @@ while [[ $1 = -* ]]; do
 done
 
 # parameter validate
-if [[ -z $width ]]; then
-  INFO "Setting horizontal width to default of 32"
-  width=32
-  if [[ ! -z $height ]]; then
-    WARN "Height was set to $height but no width specified, so ignoring height and defaulting to 32 pixels width"
-    unset height
-  fi
+if [[ -z width || -z height ]] && [[ option_stretch -eq 1 ]]; then
+  WARN "Ignoring the stretch option, since either the width or the height have not been specified"
+  unset option_stretch
 fi
 
 # Input validate
@@ -233,22 +250,47 @@ BYTES=$((16#$BYTES))
 
 INFO "File $infile has $BPP bits per pixel and is sized WxH: ${W}x${H} pixels. Total bytes: ${BYTES}"
 if [[ $BPP -gt 1 ]] ; then
-  WARN "More than 1 bit per pixel is used in the source image. This is not optimal for single-color embedded system displays. We will fix this now."  
+  WARN "More than 1 bit per pixel is used in the source image - we will fix this now"  
 fi
 
 # Resize - first we start by leaving a border of 1 pixel all around
-size_x=$((width-2))
 if [[ -z $height ]]; then
-  INFO "Calculate height based on aspect ratio of the source image"
-  size_y=$(( (width*H/W)-2 ))
+  if [[ -z $width ]]; then 
+    INFO "Setting horizontal width to default of 32 and calculating height based on aspect ratio of the source image"
+    width=32
+    size_x=$((width-2))
+    size_y=$(((width*H/W)-2))
+  else
+    INFO "Calculate height based on aspect ratio of the source image"
+    size_x=$((width-2))
+    size_y=$(((width*H/W)-2))
+  fi
 else
-  size_y=$((height-2))
+  if [[ -z $width ]]; then 
+    INFO "Calculating width based on aspect ratio of the source image"
+    size_x=$(((height*H/W)-2))
+    size_y=$((height-2))
+  else
+    size_x=$((width-2))
+    size_y=$((height-2))
+  fi
 fi
-convert $tmp1 -resize ${size_x}x${size_y} $tmp2
+
+if [[ $option_stretch -eq 1 ]]; then
+  # Deform the image
+  INFO "Deforming the image to fit inside the required size if necessary"
+  convert $tmp1 -resize ${size_x}x${size_y}\! $tmp2
+else
+  # Keep the geometry of the original 
+  INFO "Patching white-space around the image to fit inside the required size if necessary"
+  convert $tmp1 -resize ${size_x}x${size_y} $tmp2  
+  convert $tmp2 -background white -gravity center -extent ${size_x}x${size_y} +repage $tmp2
+fi
+
+# Put a 1 pixel border around it 
 size_x=$((size_x+2))
 size_y=$((size_y+2))
-INFO "Creating target image of size WxH: ${size_x}x${size_y} pixels."
-# Put a 1 pixel border around it 
+INFO "Creating target image of size WxH: ${size_x}x${size_y} pixels"
 convert $tmp2 -bordercolor white -border 1x1 $tmp2
 # Set the colour depth to 2 colours, so that we have a single bit per pixel in the end:
 convert $tmp2 -depth 2 $tmp2
@@ -270,14 +312,14 @@ imagesize=$((size_x * size_y / 8))
 chopbytes=$((filesize-imagesize))
 dd if=$tmp2 of=$tmp3 skip=${chopbytes} iflag=skip_bytes,count_bytes 2>/dev/null
 if [[ $? -ne 0 ]]; then
-  ERROR "There was an error lopping the BMP header from the 1-bit bitmap file $tmp2. Doing a HEX DUMP and then exiting..."
+  ERROR "There was an error lopping the BMP header from the 1-bit bitmap file $tmp2. Doing a HEX DUMP and then exiting."
   hexdump -C $tmp2 > /dev/stderr
   exit 1
 fi 
 # Final sanity check
 filesize=$(stat -c%s $tmp3)
 if [[ $filesize -ne $imagesize ]]; then
-  ERROR "The file size does not tally with the calculated image data size in the 1-bit bitmap file $tmp3. Doing a BINARY DUMP and then exiting..."
+  ERROR "The file size does not tally with the calculated image data size in the 1-bit bitmap file $tmp3. Doing a BINARY DUMP and then exiting.."
   xxr -b -c 4 $tmp3 > /dev/stderr
   exit 1
 fi 
@@ -292,32 +334,26 @@ for ((i=0;i<$binstrlen;i+=8)); do
 done
 
 # Creating output
-INFO "Generating C header file content for $infile..."
+INFO "Generating C header file content for $infile"
 _infile=$(basename $infile)
 imagename=${_infile%.*}
+# Rename the file that holds the result so that xxd can create the correct variable name
 tmp5=$(printf "/tmp/%s.%dx%d" $imagename $size_x $size_y)
 cp $tmp4 $tmp5
 
 if [[ $option_output -eq 1 ]]; then
   # Current working directory
   outputfilename=$(printf "%s.h" $imagename)
+  printf "#ifndef _${imagename^^}_H_\n#define _${imagename^^}_H_\n\nconst " > $outputfilename
+  if [[ ! -f $outputfilename ]]; then
+    FATAL "Could not create the file $outputfilename here in $PWD. Exiting."
+    exit 1
+  fi
+  xxd -i $tmp5 | sed -e 's/_tmp_//'  >> $outputfilename
+  printf "\n#endif   /* _${imagename^^}_H_ */\n" >> $outputfilename
 else 
-  # Temp 
-  outputfilename=$tmp6
-fi
-
-printf \
-"#ifndef _${imagename^^}_H_
-#define _${imagename^^}_H_
-
-const " > $outputfilename
-xxd -i $tmp5 | sed -e 's/_tmp_//'  >> $outputfilename
-printf "
-#endif   /* _${imagename^^}_H_ */
-" >> $outputfilename
-
-if [[ $option_output -ne 1 ]]; then
-  cat $outputfilename
+  # Output to stdout  
+  xxd -i $tmp5 | sed -e 's/_tmp_//'  
 fi
 
 # THE END.
