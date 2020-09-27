@@ -249,11 +249,59 @@ $ for i in fontawesome-free-x.x.x-web/svgs/regular/*; do bmp2c -f=$i >> bitmaps.
 $ printf "\n#endif /* _BITMAPS_H_ */\n" >> bitmaps.h
 ```
 
+## A quick implementation on ePaper
 
+```bash
+$ bmp2c.sh -f fontawesome-free-x.x.x-web/svgs/regular/hammer.svg -o
+```
+This produces the header file, hammer.h:
+```C
+#ifndef _HAMMER_H_
+#define _HAMMER_H_
 
+const unsigned char hammer_32x28[] = {
+  0xff, 0xff, 0xff, 0xff, 0xff, 0xe0, 0x7f, 0xff, 0xff, 0xc0, 0x1f, 0xff,
+  0xff, 0x82, 0x0f, 0xff, 0xff, 0x1f, 0x1f, 0xff, 0xfe, 0x3e, 0x3f, 0xff,
+  0xfc, 0x7c, 0x7f, 0xff, 0xf8, 0xfc, 0x7f, 0xff, 0xf8, 0xfc, 0x7f, 0xff,
+  0xf8, 0xf8, 0x7f, 0xff, 0x81, 0xf0, 0x3f, 0xff, 0x83, 0x83, 0x1f, 0xff,
+  0xc3, 0x01, 0x8f, 0xff, 0xe0, 0x30, 0xc7, 0xff, 0xf0, 0x78, 0x63, 0xff,
+  0xf8, 0x7c, 0x71, 0xff, 0xfc, 0x7e, 0x38, 0xff, 0xfe, 0xff, 0x1c, 0x7f,
+  0xff, 0xff, 0x8e, 0x1f, 0xff, 0xff, 0xc7, 0x0f, 0xff, 0xff, 0xe3, 0x87,
+  0xff, 0xff, 0xf1, 0xc3, 0xff, 0xff, 0xf8, 0xe3, 0xff, 0xff, 0xfc, 0x73,
+  0xff, 0xff, 0xfe, 0x03, 0xff, 0xff, 0xfe, 0x07, 0xff, 0xff, 0xff, 0x0f,
+  0xff, 0xff, 0xff, 0xff
+};
+unsigned int hammer_32x28_len = 112;
+
+#endif   /* _HAMMER_H_ */
+```
+
+Create an Arduino project on either the Arduino or the PlatformIO development platform, 
+include the libraries GxEPD2, Adafruit BusIO, Adafruit GFX, Wire, SPI and rig up your
+favourite MCU and e-paper display. Here, I used an ESP32 DoItDevKitV1 MCU and a 2.9" 
+e-paper display from Waveshare. Be warned, the GPIO connection vary wildly from MCU to MCU.
+
+```cpp
+#include <Arduino.h>
+#include "hammer.h" 
+#include <GxEPD2_BW.h>
+// Instantiate display and set esp32doit-devkit-v1 GPIOs to signals CS,DC,RST,BUSY
+GxEPD2_BW<GxEPD2_290, GxEPD2_290::HEIGHT> display(GxEPD2_290(17,16,5,19)); 
+
+void setup(){
+  display.init(115200);  
+  display.drawImage(hammer_32x28,20,10,32,28,false,false,true);  
+}
+
+void loop(){}
+```
+
+![Image display on a 2-color Waveshare e-paper display](.assets/4.jpg | width="400")
 
 # References
 
 * https://fontawesome.com/ Font Awesome
 * https://imagemagick.org/index.php ImageMagick
 * https://en.wikipedia.org/wiki/BMP_file_format  BMP-File format specification
+* https://www.waveshare.com/wiki/2.9inch_e-Paper_Module An example ePaper module specification
+* https://github.com/ZinggJM/GxEPD2 Arduino Display Library for SPI E-Paper Displays
