@@ -41,6 +41,7 @@ and to simultaneously resize it. It is useful to leave a blank 1 pixel-wide bord
 we therefore aim to produce a 30x30 pixel bitmap first and then add the border afterwards to get to our 32x32 pixel bitmap. 
 
 <img src="https://github.com/gerritonagoodday/bmp2c/blob/master/.assets/1.bmp" width="100" alt="Starting Image">
+Starting image
 
 > *Note:* The intermediate files that are produced are named a, b, c, etc... with appropriate extensions
 > to help you keep track of the process.
@@ -295,7 +296,8 @@ void setup(){
 
 void loop(){}
 ```
-<img src="https://github.com/gerritonagoodday/bmp2c/blob/master/.assets/1.bmp" width="200" alt="Image display on a 2-color Waveshare e-paper display">
+<img src="https://github.com/gerritonagoodday/bmp2c/blob/master/.assets/4.jpg" width="800" alt="Image display on a 2-color Waveshare e-paper display">
+Image display on a 2-color Waveshare e-paper display
 
 # References
 
