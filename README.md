@@ -40,7 +40,7 @@ This file is still the scalable vector graphics format, the first manipulation i
 and to simultaneously resize it. It is useful to leave a blank 1 pixel-wide border around display icons, 
 we therefore aim to produce a 30x30 pixel bitmap first and then add the border afterwards to get to our 32x32 pixel bitmap. 
 
-![Starting Image](.assets/1.bmp)
+![Starting Image](.assets/1.bmp){:height="100px" width="100px"}
 
 > *Note:* The intermediate files that are produced are named a, b, c, etc... with appropriate extensions
 > to help you keep track of the process.
@@ -296,7 +296,7 @@ void setup(){
 void loop(){}
 ```
 
-![Image display on a 2-color Waveshare e-paper display](.assets/4.jpg | width="400")
+![Image display on a 2-color Waveshare e-paper display](.assets/4.jpg){:height="200px" width="200px"}
 
 # References
 
