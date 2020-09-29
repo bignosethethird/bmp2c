@@ -1,6 +1,13 @@
 # bmp2c
 
-Create a C header-file that contains a C-array of the bitmap file's content in 1-bit colour depth.
+Create a C header-file with a 1-bit colour depth C-array of from an image file
+for use in embedded displays.
+
+```bash
+bmp2c -f|--file=filepath [-h|--height=height pixels] [-w|--width=width pixels]
+    [-r|--rotate=degrees] [-s|--stretch] [-o|--output] [-q|--quiet] [-h|help] 
+    [-v|--verbose | -d|--debug] 
+```    
 
 # Synopsys
 
@@ -18,19 +25,20 @@ for direct rendering on embedded system 2-colour displays. You should then be ab
 to include this in your automated DevOps tool chain and deliver consistent results.
 
 
-The end result is a ready-to-compile C header-file that contains the image data to displays a 2-colour image. 
-
-With a few additional steps. it possible to generate display code for 3-colour embedded displays, but will limit ourselves to the simpler case here of 2 colours.
-
-Expect to see some interesting BASH techniques here!
+The end result is a ready-to-compile C header-file that contains the image
+ data to display a 2-colour image. With a few additional steps, it possible to
+ generate display code for 3-colour embedded displays, but will limit ourselves
+ to the simpler case here of 2 colours. Expect to see some interesting BASH
+ techniques here!
 
 # Requirements
 
-You will need to have `ImageMagick` installed, and the usual gang of Linux utilities,
-such as hexdump and the non-sensically-named `xxd` utility. As a general rule, I use icons
-exclusively from `Font Awesome` in my front-end development (both web and embedded), since there
-is a huge variety of icons on offer and because of the consistent styling among them. The icons
-also come in several variants, my preference is the "regular" variant.
+You will need to have `ImageMagick` installed, and the usual gang of Linux
+utilities, such as `sed`, `awk`, `hexdump` and the non-sensically-named `xxd`
+utility. As a general rule, I use icons exclusively from `Font Awesome` in my
+front-end development (both web and embedded), since there is a huge variety
+of icons on offer and because of the consistent styling among them. The icons
+also come in several variants - my preference is the "regular" variant.
 
 # Select your source image
 
@@ -187,17 +195,21 @@ the process and to append the size attributes to the file name, e.g. the final
 file name would in this case be exclamation-circle.32x32, to end up with the 
 variable name like this: `unsigned char exclamation-circle_32x32[]`.
 
-# Conclusion
+# Conclusion - all this and more is a script!
 
 All this witty wisdom has been put together in a utility written in BASH called
 `bmp2c` (see https://github.com/gerritonagoodday/bmp2c), which, as far as I can
 tell, is the only script that delivers 1-bit colour output for any given image
-type. That's why I wrote it, after all - I needed this feature! 
+type. That's why I wrote it, after all - I needed this feature! It also has a
+host of other features which I found useful in preparing images for display on
+e-ink displays.
 
 ## A quick synopsis:
 
 ```bash
-bmp2c -f=filepath -h=height -w=width --stretch|-s --output|-o --verbose|-v
+bmp2c -f|--file=filepath [-h|--height=height pixels] [-w|--width=width pixels]
+    [-r|--rotate={90|180|270}] [-s|--stretch] [-t|--trim] [-o|--output]  
+    [-v|--verbose | -d|--debug | -q|--quiet] [-h|help] 
 
 OPTIONS (Note that there is an '=' sign between argument and value):
   -f, --file=[full path to file if in other directory]
@@ -214,6 +226,8 @@ OPTIONS (Note that there is an '=' sign between argument and value):
           aspect ratio of the source image and the width dimension that you
           specified. If you only specify the height but not the width, then the
           width is likewise calculated based on the source image aspect ratio. 
+  -r, --rotate=[degrees to rotate]
+          Rotate the source image either by 90°, 180° or 270°. 
   -s, --strech Option
           You can specify both width and height dimensions such that they do
           not correspond to the source images aspect ratio. If you specify the
@@ -221,19 +235,26 @@ OPTIONS (Note that there is an '=' sign between argument and value):
           entire target canvas. If this option is not selected, then whitespace
           is padded into the surrounding space that is created. This option 
           will be ignored if neither the width nor height are specified.
+  -t,--trim Option
+          Remove all surrounding whitespace or alpha-channel from the source
+          image first
   -o, --output Option
           Produce output header file named according to the source image 
           filename, without having to do any redirection. The ouput file will
-          created in the current working directory, with an .h extension.
+          created in the current working directory, with an .h extension.          
   -v, --verbose Option
-          Verbose screen output. All output will also be logged.
+          Verbose screen output to stderr. All output will also be logged.
   -d, --debug Option
-          Output debug messages to screen and log.           
+          Output debug messages to stderr screen and log.           
+  -q, --quiet Option
+          Does not produce any process commentary to stderr nor does logging.
   -h, --help Option
           Displays this text 
 ```
 
-## Fun things to do
+# Fun things to do with this script
+
+## Mass-produce header files for an entire directory
 
 Since this is a command-line utiity, you can do clever things like converting
 an entire directory of icon files into C header-files:
@@ -250,7 +271,7 @@ $ for i in fontawesome-free-x.x.x-web/svgs/regular/*; do bmp2c -f=$i >> bitmaps.
 $ printf "\n#endif /* _BITMAPS_H_ */\n" >> bitmaps.h
 ```
 
-## A quick implementation on ePaper
+## A quick implementation on a Waveshare e-ink display
 
 ```bash
 $ bmp2c.sh -f fontawesome-free-x.x.x-web/svgs/regular/hammer.svg -o
@@ -277,10 +298,11 @@ unsigned int hammer_32x28_len = 112;
 #endif   /* _HAMMER_H_ */
 ```
 
-Create an Arduino project on either the Arduino or the PlatformIO development platform, 
-include the libraries GxEPD2, Adafruit BusIO, Adafruit GFX, Wire, SPI and rig up your
-favourite MCU and e-paper display. Here, I used an ESP32 DoItDevKitV1 MCU and a 2.9" 
-e-paper display from Waveshare. Be warned, the GPIO connection vary wildly from MCU to MCU.
+Create an Arduino project on either the Arduino or the PlatformIO development
+platform, include the libraries GxEPD2, Adafruit BusIO, Adafruit GFX, Wire, 
+SPI and rig up your favourite MCU and e-paper display. Here, I used an ESP32
+DoItDevKitV1 MCU and a 2.9" e-paper display from Waveshare. Be warned, the 
+connections for SPI vary wildly from MCU to MCU.
 
 ```cpp
 #include <Arduino.h>
