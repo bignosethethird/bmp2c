@@ -9,6 +9,7 @@ function cleanup {
   rm $tmp3 2>/dev/null
   rm $tmp4 2>/dev/null
   rm $tmp5 2>/dev/null  
+  rm $tmp6 2>/dev/null  
   sync
 }
 for sig in KILL TERM INT EXIT; do trap "cleanup $sig" "$sig" ; done
@@ -16,19 +17,20 @@ for sig in KILL TERM INT EXIT; do trap "cleanup $sig" "$sig" ; done
 #============================================================================#
 # Global variables
 #============================================================================#
-
 PROGNAME=${0##*/}
 PROGNAME=${PROGNAME%.*}
-tmp1=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.bmp)
-tmp2=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.bmp)
-tmp3=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.raster)
-tmp4=$(mktemp /tmp/tmp.${PROGNAME}.XXXXXX.raster)
+COMMAND="$PROGNAME $@"
+tmp1=$(mktemp "/tmp/tmp.${PROGNAME}.XXXXXX.bmp")
+tmp2=$(mktemp "/tmp/tmp.${PROGNAME}.XXXXXX.bmp")
+tmp3=$(mktemp "/tmp/tmp.${PROGNAME}.XXXXXX.raster")
+tmp4=$(mktemp "/tmp/tmp.${PROGNAME}.XXXXXX.raster")
+tmp5=$(mktemp "/tmp/tmp.${PROGNAME}.XXXXXX.raster")
 
-NOW=$(date +"%Y-%m-%d %H:%M:%S")
-TODAY=$(date +"%d %b %Y")
-YEAR=$(date +"%Y")
-ISODATE=$(date +%Y%m%d)
-EXITCODE=0
+#NOW=$(date +"%Y-%m-%d %H:%M:%S")
+#TODAY=$(date +"%d %b %Y")
+#YEAR=$(date +"%Y")
+#ISODATE=$(date +%Y%m%d)
+#EXITCODE=0
 ENVIRONMENT=$(hostname)
 
 # Set up logging if not already setup - this is important if we run this as a cron job
@@ -98,10 +100,8 @@ function FATAL {
 }
 
 function LOGDIE {
-  if [[ -z $option_quiet ]]; then
-    TS=$(date '+%Y/%m/%d %H:%M:%S')
-    printf "[$TS][FATAL][${PROGNAME}][${ENVIRONMENT}] $@\n" >&2 2 > >(tee -a $LOGFILE >&2)
-  fi
+  TS=$(date '+%Y/%m/%d %H:%M:%S')
+  printf "[$TS][FATAL][${PROGNAME}][${ENVIRONMENT}] $@\n" >&2 2 > >(tee -a $LOGFILE >&2)
   exit 1
 }
 
@@ -117,9 +117,10 @@ function SECURITY {
 #============================================================================#
 function synopsis {
 cat <<!
-bmp2c -f|--file=filepath [-h|--height=height pixels] [-w|--width=width pixels]
-    [-r|--rotate={90|180|270}] [-s|--stretch] [-t|--trim] [-o|--output]  
-    [-v|--verbose | -d|--debug | -q|--quiet] [-h|help] 
+bmp2c image-filepath [-h|--height=height pixels] [-w|--width=width pixels]
+    [-r|--rotate={90|180|270|-90}] [-i|--invert] [-o|--output] [-p|--progmem] 
+    [-s|--stretch] [-t|--trim] [-v|--verbose | -d|--debug | -q|--quiet] 
+    [--help]
 !
 }
 
@@ -148,10 +149,12 @@ The resulting C-array will be called {filename}_{width}x{height}, e.g.
   };
   #endif   /* _MYIMAGE_H_ */
 
+PARAMETERS
+  image-filepath    
+          The filepath of the source image. It can be any type of image file 
+          and of any size or form factor. This must be the first parameter.
+
 OPTIONS (Note that there is an '=' sign between argument and value):
-  -f, --file=[full path to file if in other directory]
-          The file name of the source image. It can be type of image file and
-          of any size or form factor.
   -w, --width=[target width in pixels]
           This is the (horizontal) width of the target file in pixels. If you
           don't specify either the width or the height, the width will default
@@ -163,8 +166,18 @@ OPTIONS (Note that there is an '=' sign between argument and value):
           aspect ratio of the source image and the width dimension that you
           specified. If you only specify the height but not the width, then the
           width is likewise calculated based on the source image aspect ratio. 
+  -i, --invert Option
+          Inverts black to white pixels and white to black pixels
+  -o, --output Option
+          Produce output header file named according to the source image 
+          filename, without having to do any redirection. The ouput file will
+          created in the current working directory, with an .h extension.          
+  -p, --progmem Option
+          The PROGMEM directive is added to the generated C-array to store it
+          in flash program memory instead of SRAM. This is essential for some
+          MCUs, especially the ones used in Arduino boards.
   -r, --rotate=[degrees to rotate]
-          Rotate the source image either by 90°, 180° or 270°. 
+          Rotate the source image either by 90°, 180° or 270°/-90°. 
   -s, --strech Option
           You can specify both width and height dimensions such that they do
           not correspond to the source images aspect ratio. If you specify the
@@ -175,19 +188,14 @@ OPTIONS (Note that there is an '=' sign between argument and value):
   -t,--trim Option
           Remove all surrounding whitespace or alpha-channel from the source
           image first
-  -o, --output Option
-          Produce output header file named according to the source image 
-          filename, without having to do any redirection. The ouput file will
-          created in the current working directory, with an .h extension.          
   -v, --verbose Option
           Verbose screen output to stderr. All output will also be logged.
   -d, --debug Option
           Output debug messages to stderr screen and log.           
   -q, --quiet Option
           Does not produce any process commentary to stderr nor does logging.
-  -h, --help Option
-          Displays this text 
-
+  --help Option
+          Displays this text..
 
 !
 }
@@ -201,19 +209,23 @@ if [[ -z $1 ]] ; then
   exit 1
 fi
 
+if [[ $1 != "-*" ]]; then
+  infile=$1
+  shift
+fi      
+
 while [[ $1 = -* ]]; do
   ARG=$(echo $1|cut -d'=' -f1)
   VAL=$(echo $1|cut -d'=' -f2)
 
   case $ARG in
-    "--file" | "-f")
-      if [[ -z $infile ]]; then
-        infile=$VAL; [[ $VAL = "$ARG" ]] && shift && infile=$1        
-      fi
+    "--debug" | "-d" )
+      option_debug=1
+      option_verbose=1
       ;;
-    "--width" | "-w")
-      if [[ -z $width ]]; then
-        width=$VAL; [[ $VAL = "$ARG" ]] && shift && width=$1        
+    "--file" | "-f")  # old-style
+      if [[ -z $infile ]]; then
+        infile=$VAL; [[ $VAL = "$ARG" ]] && shift && infile=$1
       fi
       ;;
     "--height" | "-h")
@@ -221,8 +233,20 @@ while [[ $1 = -* ]]; do
         height=$VAL; [[ $VAL = "$ARG" ]] && shift && height=$1        
       fi
       ;;
+    "--invert" | "-i" )
+      option_invert=1
+      ;;
+    "--output" | "-o" )
+      option_output=1
+      ;;
+    "--progmem" | "-p" )
+      option_progmem=1
+      ;;
+    "--quiet" | "-q" )
+      option_quiet=1
+      ;;
     "--rotate" | "-r")
-      if [[ -z $height ]]; then
+      if [[ -z $rotate ]]; then
         rotate=$VAL; [[ $VAL = "$ARG" ]] && shift && rotate=$1
       fi
       ;;
@@ -235,21 +259,16 @@ while [[ $1 = -* ]]; do
     "--verbose" | "-v" )
       option_verbose=1
       ;;
-    "--quiet" | "-q" )
-      option_quiet=1
+    "--width" | "-w")
+      if [[ -z $width ]]; then
+        width=$VAL; [[ $VAL = "$ARG" ]] && shift && width=$1        
+      fi
       ;;
-    "--output" | "-o" )
-      option_output=1
-      ;;
-    "--debug" | "-d" )
-      option_debug=1
-      option_verbose=1
-      ;;
-    "--help" | "-h" )      
+    "--help" )      
       usage
       exit 1
       ;;
-    *)    
+    *)  
       ERROR "Invalid option: $1"
       synopsis
       exit 1
@@ -258,8 +277,11 @@ while [[ $1 = -* ]]; do
   shift
 done
 
+# Input validate
+[[ ! -f $infile ]] && LOGDIE "File $infile does not exist. Exiting..." 
+
 # parameter validate
-if [[ -z width || -z height ]] && [[ option_stretch -eq 1 ]]; then
+if [[ -z $width || -z $height ]] && [[ $option_stretch -eq 1 ]]; then
   WARN "Ignoring the stretch option, since either the width or the height have not been specified"
   unset option_stretch
 fi
@@ -267,8 +289,11 @@ fi
 if [[ -n $rotate ]]; then
   case $rotate in
     90 | 180 | 270 ) 
-      TRACE "[$LINEON] Specified image rotation of $rotate degrees."
+      TRACE "[$LINENO] Specified image rotation of $rotate degrees."
       ;; 
+   -90 ) 
+     rotate=270
+     ;;
     *)
       ERROR "Invalid rotation specified: $rotate. Specify either 90, 180 or 270."
       synopsis
@@ -277,36 +302,32 @@ if [[ -n $rotate ]]; then
   esac  
 fi
 
-# Input validate
-if [[ ! -f $infile ]]; then
-  ERROR "File $infile does not exist. Exiting..." 
-  exit 1
-fi
 
 # If the input file is not a BMP file. convert it to one
 if [[ ${infile##*.} != "bmp" ]]; then
   INFO "$infile is not a bitmap file. Converting it to $tmp1..."
-  TRACE "[$LINENO] convert to BMP"
+  TRACE "[$LINENO] convert $infile $tmp1"
   convert $infile $tmp1  
   DEBUG "[$LINENO] $(identify $tmp1)"
 else
   cp $infile $tmp1  
 fi
 
-if [[ -n $trim ]]; then
+if [[ -n $option_trim ]]; then
   INFO "Trim $infile..."
-  TRACE "[$LINENO] convert -trim"
+  TRACE "[$LINENO] convert $tmp1 -trim $tmp1"
   convert $tmp1 -trim $tmp1
   DEBUG "[$LINENO] $(identify $tmp1)"
 fi
 
 if [[ -n $rotate ]]; then
   INFO "Rotate $infile  by $rotate degrees.."
-  TRACE "[$LINENO] convert -rotate"
+  TRACE "[$LINENO] convert $tmp1 -rotate $rotate $tmp1"
   convert $tmp1 -rotate $rotate $tmp1
   DEBUG "[$LINENO] $(identify $tmp1)"
 fi
 
+# Get technical details from BMP file
 # Get Width in HEX (offset 0x12 = 18)
 W=$(hexdump -v -e '/1 "%02X "' $tmp1 | awk '{printf "%s%s%s%s", $22, $21, $20, $19 }' | sed -e 's/ //g')
 W=$((16#$W))
@@ -356,16 +377,16 @@ TRACE "[$LINENO] Working size is ${size_x}x${size_y} before adding 1 pixel borde
 if [[ $option_stretch -eq 1 ]]; then
   # Deform the image
   INFO "Deforming the image to fit inside the required size if necessary"
-  TRACE "[$LINENO] convert -resize"
+  TRACE "[$LINENO] convert $tmp1 -resize ${size_x}x${size_y}\! $tmp2"
   convert $tmp1 -resize ${size_x}x${size_y}\! $tmp2
   DEBUG "[$LINENO] $(identify $tmp2)"
 else
   # Keep the geometry of the original 
   INFO "Patching white-space around the image to fit inside the required size if necessary"
-  TRACE "[$LINENO] convert -resize"
+  TRACE "[$LINENO] convert $tmp1 -resize ${size_x}x${size_y} $tmp2 "
   convert $tmp1 -resize ${size_x}x${size_y} $tmp2 
   TRACE "[$LINENO] $(identify $tmp2)"
-  TRACE "[$LINENO] convert -extent"
+  TRACE "[$LINENO] convert $tmp2 -background white -gravity center -extent ${size_x}x${size_y} +repage $tmp2"
   convert $tmp2 -background white -gravity center -extent ${size_x}x${size_y} +repage $tmp2
   DEBUG "[$LINENO] $(identify $tmp2)"
 fi
@@ -374,19 +395,19 @@ fi
 size_x=$((size_x+2))
 size_y=$((size_y+2))
 INFO "Creating target image of size WxH: ${size_x}x${size_y} pixels"
-TRACE "[$LINENO] Adding 1-pixel border"
+TRACE "[$LINENO] Adding 1-pixel border: convert $tmp2 -bordercolor white -border 1x1 $tmp2"
 convert $tmp2 -bordercolor white -border 1x1 $tmp2
 DEBUG "[$LINENO] $(identify $tmp2)"
 # Set the colour depth to 2 colours, so that we have a single bit per pixel in the end:
-TRACE "[$LINENO] Set the colour depth to 2 colours"
+TRACE "[$LINENO] Set the colour depth to 2 colours: convert $tmp2 -depth 2 $tmp2"
 convert $tmp2 -depth 2 $tmp2
 DEBUG "[$LINENO] $(identify $tmp2)"
 # Set the colour pallete to 2 colours:
-TRACE "[$LINENO] Set the colour pallete to 2 colours:"
+TRACE "[$LINENO] Set the colour pallete to 2 colours: convert $tmp2 +dither -colors 2 -colorspace gray -contrast-stretch 0 $tmp2"
 convert $tmp2 +dither -colors 2 -colorspace gray -contrast-stretch 0 $tmp2
 DEBUG "[$LINENO] $(identify $tmp2)"
 # Final tweak: Set to monochrome
-TRACE "[$LINENO] Final tweak: Set to monochrome"
+TRACE "[$LINENO] Final tweak: Set to monochrome: convert $tmp2 -monochrome $tmp2"
 convert $tmp2 -monochrome $tmp2
 DEBUG "[$LINENO] $(identify $tmp2)"
 # Check that we have 2 colours and 1 bit per pixel:
@@ -396,57 +417,82 @@ if [[ $? -ne 0 ]]; then
   exit 1
 fi 
 
-# Chop BMP header so that we only remain with the raster data
-# Calculate bytes
+
+# Deterrmine image offset from technical BMP header
+image_offset=$(hexdump -v -e '/1 "%02X "' $tmp2 | awk '{printf "%s%s%s%s", $14, $13, $12, $11 }' | sed -e 's/ //g')
+image_offset=$((16#$image_offset))
 filesize=$(stat -c%s $tmp2)
 imagesize=$((size_x * size_y / 8))
-TRACE "[$LINENO] Imagesize is calculated to be $imagesize bytes, total working BMP-file size is $filesize"
-chopbytes=$((filesize-imagesize))
-TRACE "[$LINENO] Chopping leading $chopbytes bytes from image"
-dd if=$tmp2 of=$tmp3 skip=${chopbytes} iflag=skip_bytes,count_bytes 2>/dev/null
+
+# Chop BMP header so that we only remain with the raster data
+DEBUG "[$LINENO] BMP-file size is $filesize. Imagesize is calculated to be $imagesize bytes. Chopping leading $image_offset bytes from image."
+TRACE "[$LINENO] dd if=$tmp2 of=$tmp3 skip=${image_offset} iflag=skip_bytes,count_bytes 2>/dev/null"
+dd if=$tmp2 of=$tmp3 skip=${image_offset} iflag=skip_bytes,count_bytes 2>/dev/null
 if [[ $? -ne 0 ]]; then
   ERROR "There was an error lopping the BMP header from the 1-bit bitmap file $tmp2. Doing a HEX DUMP and then exiting."
   hexdump -C $tmp2 > /dev/stderr
   exit 1
 fi 
+
+# Check if image data words are padded out with 0-value words
+offset_calculated=$((filesize-imagesize))
+if [[ $offset_calculated -eq $image_offset ]]; then
+  TRACE "[$LINENO] No word padding in image data"
+  cp $tmp3 $tmp4
+else
+  TRACE "[$LINENO] Word padding in image data - remove every second zero word"
+  hexdump -v -e '/1 "%02X "' $tmp3 | sed -e 's/\([0-9A-F]\{2\}\) \([0-9A-F]\{2\}\) \([0-9A-F]\{2\}\) \([0-9A-F]\{2\}\) /\1 \2 /g' |  sed -e 's/ / 0x/g' | xxd -r -p  > $tmp4
+fi
+
 # Final sanity check
-filesize=$(stat -c%s $tmp3)
+filesize=$(stat -c%s $tmp4)
 if [[ $filesize -ne $imagesize ]]; then
-  ERROR "The file size does not tally with the calculated image data size in the 1-bit bitmap file $tmp3. Doing a BINARY DUMP and then exiting."
-  xxr -b -c 4 $tmp3 > /dev/stderr
+  ERROR "The final file size does not tally with the calculated image data size in the 1-bit bitmap file $tmp4. Doing a BINARY DUMP and then exiting."
+  xxd -b -c 4 $tmp4 > /dev/stderr
   exit 1
 fi 
 
 # reversing the content on a bit-wise basis
-rm $tmp4 2>/dev/null
-binstr=$(xxd -b -c 1 $tmp3 | cut -f 2 -d " " | sed -E 's/(.)/\1 /g' | tr '\n' ' ' | sed -E 's/ //g' | rev )
+rm $tmp5 2>/dev/null
+binstr=$(xxd -b -c 1 $tmp4 | cut -f 2 -d " " | sed -E 's/(.)/\1 /g' | tr '\n' ' ' | sed -E 's/ //g' | rev )
+# Now i a good time to invert the bits if required...
+if [[ -n $option_invert ]]; then
+  TRACE  "[$LINENO] Swapping 0s and 1s around"
+  binstr=$(echo $binstr | sed -e 's/1/w/g' | sed -e 's/0/1/g' | sed -e 's/w/0/g')
+fi
 binstrlen=${#binstr}
 for ((i=0;i<$binstrlen;i+=8)); do 
   binchar=${binstr:$i:8}  
-  printf "%02X " $((2#${binchar})) | xxd -r -p >> $tmp4
+  printf "%02X " $((2#${binchar})) | xxd -r -p >> $tmp5
 done
 
 # Creating output
 _infile=$(basename $infile)
 imagename=$(echo ${_infile%.*} | sed -e 's/-/_/g')
 # Rename the file that holds the result so that xxd can create the correct variable name from it
-tmp5=$(printf "/tmp/%s.%dx%d" $imagename $size_x $size_y)
-cp $tmp4 $tmp5
+tmp6=$(printf "/tmp/%s.%dx%d" $imagename $size_x $size_y)
+cp $tmp5 $tmp6
 if [[ $option_output -eq 1 ]]; then
-  # Current working directory
+  # Output to C header file in current working directory
   outputfilename=$(printf "%s.h" $imagename)
   INFO "Generating C header file $outputfilename for source file $infile"
-  printf "#ifndef _${imagename^^}_H_\n#define _${imagename^^}_H_\n\nconst " > $outputfilename
+  printf "#ifndef _%s_H_\n#define _%s_H_\n\n" ${imagename^^} ${imagename^^} > $outputfilename
   if [[ ! -f $outputfilename ]]; then
-    FATAL "Could not create the file $outputfilename here in $PWD. Exiting."
-    exit 1
+    LOGDIE "Could not create the file $outputfilename here in $PWD. Exiting."    
   fi
-  xxd -i $tmp5 | sed -e 's/_tmp_//'  >> $outputfilename
-  printf "\n#endif   /* _${imagename^^}_H_ */\n" >> $outputfilename
+  printf "// Auto-generated file: %s\n\n" "$COMMAND" >> $outputfilename
+  printf "const " >> $outputfilename
+  if [[ $option_progmem -eq 1 ]]; then
+    xxd -i $tmp6 | sed -e 's/_tmp_//' -e 's/= {/PROGMEM = {/' >> $outputfilename
+  else
+    xxd -i $tmp6 | sed -e 's/_tmp_//'  >> $outputfilename
+  fi
+  printf "\n#endif   /* _%s_H_ */\n" ${imagename^^} >> $outputfilename
 else 
-  INFO "Generating C header file content for source file $infile"
+  INFO "Generating C header file content only for source file $infile to stdout"
   # Output to stdout  
-  xxd -i $tmp5 | sed -e 's/_tmp_//'  
+  printf "// Auto-generated file: %s\n\n" "$COMMAND"
+  xxd -i $tmp6 | sed -e 's/_tmp_//'  
 fi
 
 # THE END.

@@ -5,8 +5,8 @@ for use in embedded displays.
 
 ```bash
 bmp2c -f|--file=filepath [-h|--height=height pixels] [-w|--width=width pixels]
-    [-r|--rotate=degrees] [-s|--stretch] [-o|--output] [-q|--quiet] [-h|help] 
-    [-v|--verbose | -d|--debug] 
+    [-r|--rotate={90|180|270|-90}] [-s|--stretch] [-t|--trim] [-o|--output]  
+    [-v|--verbose | -d|--debug | -q|--quiet] [-h|help] 
 ```    
 
 # Synopsys
@@ -46,7 +46,8 @@ We start with the downloading of the FontAwesome desktop package from https://fo
 Unpack it and select your source icon from the svgs directory and move it into your work area.
 This file is still the scalable vector graphics format, the first manipulation is to convert it to a bitmap
 and to simultaneously resize it. It is useful to leave a blank 1 pixel-wide border around display icons, 
-we therefore aim to produce a 30x30 pixel bitmap first and then add the border afterwards to get to our 32x32 pixel bitmap. 
+ since it looks eleganter and helps with the visual transition from the hard bezel to the display surface. 
+We therefore start with producing a 30x30 pixel bitmap first and then add the border afterwards to get to our 32x32 pixel bitmap. 
 
 <img src="https://github.com/gerritonagoodday/bmp2c/blob/master/.assets/1.bmp" width="100" alt="Starting Image">
 Starting image
@@ -56,33 +57,24 @@ Starting image
 
 # Creating a bitmap from your source
 
-A BMP-file not only holds the rasterized image-data in a nice, continuous block of data, 
-but in its header it also holds parameters to help display it, e.g. width, height, colour depth, etc. 
-It is of course the rasterized image-data here that we are after and want convert into C-code.
-
-We use the `convert` utility from ImageMagick to convert the SVG-file to a 30x30 pixel BMP-file.
+(a) First step: We use the `convert` utility from ImageMagick to convert the SVG-file to a 30x30 pixel BMP-file.
 ```bash
 $ convert exclamation-circle.svg -resize 30x30 a.bmp
 ```
 
-Put a 1 pixel border around it to make it 32 x 32 pixels in size.
+(b) Then we put a 1 pixel border around it to make it 32 x 32 pixels in size.
 ```bash
 $ convert a.bmp -bordercolor white -border 1x1 b.bmp
 ```
 
-Set the colour depth to 2 colours, so that we have a single bit per pixel in the end:
+(c) Set the colour depth to 2 colours, so that we have a single bit per pixel in the end:
 ```bash
 $ convert b.bmp -depth 2 c.bmp
 ```
 
-Set the colour pallete to 2 colours:
+(d) Set the colour pallete to 2 colours and set it to monochrome:
 ```bash
-$ convert c.bmp +dither -colors 2 -colorspace gray -contrast-stretch 0 d.bmp
-```
-
-A final tweak: Set to monochrome
-```bash
-$ convert d.bmp -monochrome d.bmp
+$ convert c.bmp +dither -colors 2 -colorspace gray -contrast-stretch 0 -monochrome d.bmp
 ```
 
 Check that we have 2 colours and 1 bit per pixel:
@@ -92,7 +84,10 @@ $ identify d.bmp
 d.bmp BMP 32x32 32x32+0+0 1-bit sRGB 2c 274B 0.000u 0:00.000
 ```
 
-Also look at some other bitmap file properties by doing a binary dump in hexadecimal:
+A BMP-file not only holds the rasterized image-data in a nice, continuous block of data, 
+but in its header it also holds the parameters to help display it, e.g. width, height, colour depth, etc. 
+It is of course the rasterized image-data here that we are after and want convert into C-code.
+But let's take a look at the bitmap file header first by doing a binary dump in hexadecimal:
 
 ![A hexdump of the BMP file so far](.assets/hexdump1.png)
 
@@ -103,12 +98,18 @@ We can also confirm that both width (at 0x12, in red) and height (at 0x16, in re
 
 So far, so good, but looking at the file format definition, the beginning of the image's raster-data
 is not easy to determine due to all sorts of colour space definitions and arbitrary gaps being allowed for
-in the specification. 
-So rather than fathoming out the logic for the particular BMP-file that we are using, 
-the easiest way to find the beginning of the image-data is to count backwards from the end of the file. 
+in the specification. The nice folks responsible for the BMP file format fortunately gave us the starting point
+of the raster data at address 0x0A (the 4 little-endian bytes in purple), which in this case contains the value 0x82.
+If we look at address 0x82, we can see the raster data for the image (the blue area).
 
-Since we have 1 bit per pixel, and we have 32 x 32 = 1024 pixels, which amounts to 1024 bits, 
-we can safely say that the last 1024 / 8 = 128 bytes of the file is image data. 
+Depending on the tool that was used to generate the bitmap, which would have afected the colour definition table in the header. 
+the raster data could be padded out with extra zero-bytes (see the light-blue columns), in every second word.
+We can deterime wether the zero data is part of the image or  not before we go flying in, guns ablaze, and possibly removing 
+half the image, by comparing the file size with the raster image size. 
+
+Since we have 1 bit per pixel, and we have 32 x 32 = 1024 pixels, which amounts to 1024 bits, or 128 bytes.
+The file header at address 0x22 (in black) tells us that the image size is 0x00 0x01 (=256) bytes, which means that there 
+the words have been padded out with zero-words. 
 
 The curent bitmap file's size is 274 bytes: 
 
@@ -207,17 +208,19 @@ e-ink displays.
 ## A quick synopsis:
 
 ```bash
-bmp2c -f|--file=filepath [-h|--height=height pixels] [-w|--width=width pixels]
-    [-r|--rotate={90|180|270}] [-s|--stretch] [-t|--trim] [-o|--output]  
-    [-v|--verbose | -d|--debug | -q|--quiet] [-h|help] 
+bmp2c image-filepath [-h|--height=height pixels] [-w|--width=width pixels]
+    [-r|--rotate={90|180|270|-90}] [-s|--stretch] [-t|--trim] [-o|--output]  
+    [-v|--verbose | -d|--debug | -q|--quiet] [--help] 
+
+PARAMETERS
+  image-filepath    
+          The filepath of the source image. It can be any type of image file 
+          and of any size or form factor. This must be the first parameter.
 
 OPTIONS (Note that there is an '=' sign between argument and value):
-  -f, --file=[full path to file if in other directory]
-          The file name of the source image. It can be type of image file and
-          of any size or form factor.
   -w, --width=[target width in pixels]
           This is the (horizontal) width of the target file in pixels. If you
-          don't specify either the width or the height, the width will default
+          don\'t specify either the width or the height, the width will default
           to 32 pixels and the height will be determined by the aspect ratio of
           the source image.
   -h, --height=[target height in pixels]
@@ -227,7 +230,7 @@ OPTIONS (Note that there is an '=' sign between argument and value):
           specified. If you only specify the height but not the width, then the
           width is likewise calculated based on the source image aspect ratio. 
   -r, --rotate=[degrees to rotate]
-          Rotate the source image either by 90°, 180° or 270°. 
+          Rotate the source image either by 90°, 180° or 270°/-90°. 
   -s, --strech Option
           You can specify both width and height dimensions such that they do
           not correspond to the source images aspect ratio. If you specify the
@@ -248,8 +251,8 @@ OPTIONS (Note that there is an '=' sign between argument and value):
           Output debug messages to stderr screen and log.           
   -q, --quiet Option
           Does not produce any process commentary to stderr nor does logging.
-  -h, --help Option
-          Displays this text 
+  --help Option
+          Displays this text.
 ```
 
 # Fun things to do with this script
@@ -304,6 +307,8 @@ SPI and rig up your favourite MCU and e-paper display. Here, I used an ESP32
 DoItDevKitV1 MCU and a 2.9" e-paper display from Waveshare. Be warned, the 
 connections for SPI vary wildly from MCU to MCU.
 
+<img src="https://github.com/gerritonagoodday/bmp2c/blob/master/.assets/SimpleTest_bb.png" width="400" alt="Wiring of the SPI interface on a 2-color Waveshare e-ink display">
+
 ```cpp
 #include <Arduino.h>
 #include "hammer.h" 
@@ -318,7 +323,7 @@ void setup(){
 
 void loop(){}
 ```
-<img src="https://github.com/gerritonagoodday/bmp2c/blob/master/.assets/4.jpg" width="800" alt="Image display on a 2-color Waveshare e-paper display">
+<img src="https://github.com/gerritonagoodday/bmp2c/blob/master/.assets/4.jpg" width="800" alt="Image display on a 2-color Waveshare e-ink display">
 Image display on a 2-color Waveshare e-paper display
 
 # References
